@@ -427,3 +427,12 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Projeto CreditoFiscal
+appsettings.Local.json
+.idea/
+.vs/
+*.user
+**/TestResults/
+carga/resultado-*.json
+
