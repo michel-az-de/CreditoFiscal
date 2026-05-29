@@ -20,7 +20,7 @@ public sealed class CreditoTestes
             DataConstituicao = data,
             ValorIssqn = 1500.75m,
             TipoCredito = "ISSQN",
-            SimplesNacional = true,
+            SimplesNacional = SimplesNacional.Optante,
             Aliquota = 5.0m,
             ValorFaturado = 30000m,
             ValorDeducao = 5000m,
@@ -33,7 +33,7 @@ public sealed class CreditoTestes
         credito.DataConstituicao.Should().Be(data);
         credito.ValorIssqn.Should().Be(1500.75m);
         credito.TipoCredito.Should().Be("ISSQN");
-        credito.SimplesNacional.Should().BeTrue();
+        credito.SimplesNacional.Should().Be(SimplesNacional.Optante);
         credito.Aliquota.Should().Be(5.0m);
         credito.ValorFaturado.Should().Be(30000m);
         credito.ValorDeducao.Should().Be(5000m);

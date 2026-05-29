@@ -28,7 +28,7 @@ public sealed class CreditoRepositoryTestes
             DataConstituicao = new DateTime(2024, 5, 28),
             ValorIssqn = 1500m,
             TipoCredito = "ISSQN",
-            SimplesNacional = false,
+            SimplesNacional = SimplesNacional.NaoOptante,
             Aliquota = 5m,
             ValorFaturado = 30000m,
             ValorDeducao = 5000m,
