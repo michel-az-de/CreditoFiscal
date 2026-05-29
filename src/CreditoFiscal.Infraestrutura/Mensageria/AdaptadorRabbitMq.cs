@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -9,7 +10,7 @@ using RabbitMQ.Client;
 namespace CreditoFiscal.Infraestrutura.Mensageria;
 
 // adapter RabbitMQ: so a IConnection e compartilhada; o IModel vive local (nao e thread-safe)
-public sealed class AdaptadorRabbitMq : IMensagemPublisher
+public sealed class AdaptadorRabbitMq : IMensagemPublisher, IMensagemConsumer
 {
     private static readonly JsonSerializerOptions OpcoesJson = CriarOpcoes();
 
@@ -34,6 +35,24 @@ public sealed class AdaptadorRabbitMq : IMensagemPublisher
 
         canal.BasicPublish(exchange: "", routingKey: fila, mandatory: false, basicProperties: propriedades, body: corpo);
         return Task.CompletedTask;
+    }
+
+    public Task<IConsumerSession<T>> AbrirSessaoAsync<T>(string fila, int maximo, TimeSpan timeout, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        // a sessao assume a posse do canal e o descarta no fim (o DeliveryTag e preso a ele)
+        var canal = _conexao.CreateModel();
+        try
+        {
+            IConsumerSession<T> sessao = new RabbitMqConsumerSession<T>(canal, fila, maximo, timeout, OpcoesJson);
+            return Task.FromResult(sessao);
+        }
+        catch
+        {
+            canal.Dispose();
+            throw;
+        }
     }
 
     private static JsonSerializerOptions CriarOpcoes()
