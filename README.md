@@ -42,12 +42,26 @@ Pré-requisito: Docker.
 docker compose up --build
 ```
 
-Sobe Postgres, RabbitMQ e a API. A API só inicia depois que os dois passam no healthcheck
-(`depends_on: condition: service_healthy`), aplica as migrations no startup e fica disponível em:
+Sobe Postgres, RabbitMQ e a API. A API espera o Postgres ficar saudável (barreira para aplicar as
+migrations no startup) e resolve a conexão com o broker via retry. Fica disponível em:
 
 - API: `http://localhost:8080`
 - Swagger: `http://localhost:8080/swagger`
 - Painel RabbitMQ: `http://localhost:15672` (guest / guest)
+
+### Trocar de provedor de mensageria
+
+O provedor é escolhido por configuração (`Mensageria:Provedor`). Os adapters de **Kafka** e **ServiceBus** sobem em *profiles* do compose:
+
+```bash
+# Kafka (broker local em KRaft)
+MENSAGERIA_PROVEDOR=Kafka docker compose --profile kafka up --build
+
+# ServiceBus (emulator oficial + SQL de apoio)
+MENSAGERIA_PROVEDOR=ServiceBus docker compose --profile servicebus up --build
+```
+
+A config de cada provedor fica aninhada no `appsettings.json` (`Mensageria:RabbitMQ`, `Mensageria:Kafka`, `Mensageria:ServiceBus`) e o compose sobrepõe por variável de ambiente. A fila `integrar-credito-constituido-entry` é criada automaticamente: RabbitMQ via `CriadorDeFilas`, Kafka via auto-create de tópico, ServiceBus via `servicebus-emulator-config.json`.
 
 Para rodar build e testes localmente (precisa do SDK .NET 6 — versão pinada no `global.json`):
 
