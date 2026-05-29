@@ -1,10 +1,19 @@
 using CreditoFiscal.Api.Middlewares;
+using CreditoFiscal.Infraestrutura.Json;
+using CreditoFiscal.Infraestrutura.Mensageria;
+using CreditoFiscal.Infraestrutura.Persistencia;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(opcoes =>
+{
+    opcoes.JsonSerializerOptions.Converters.Add(new ConversorDeDataSemFusoHorario());
+});
+
+builder.Services.AdicionarPersistencia(builder.Configuration);
+builder.Services.AdicionarMensageria(builder.Configuration);
 
 var app = builder.Build();
 
