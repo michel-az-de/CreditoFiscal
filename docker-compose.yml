@@ -1,6 +1,6 @@
-# Padrao (RabbitMQ):   docker compose up --build
-# Com Kafka:           MENSAGERIA_PROVEDOR=Kafka docker compose --profile kafka up --build
-# Com ServiceBus:      MENSAGERIA_PROVEDOR=ServiceBus docker compose --profile servicebus up --build
+# Padrao (Kafka):       docker compose up --build
+# Com RabbitMQ:         MENSAGERIA_PROVEDOR=RabbitMQ docker compose --profile rabbitmq up --build
+# Com ServiceBus:       MENSAGERIA_PROVEDOR=ServiceBus docker compose --profile servicebus up --build
 services:
   postgres:
     image: postgres:15-alpine
@@ -19,47 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: credito-fiscal-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: credito-fiscal-api
-    ports:
-      - "8080:8080"
-    environment:
-      ASPNETCORE_URLS: "http://+:8080"
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=creditofiscal;Username=postgres;Password=postgres"
-      # provedor selecionavel; o broker correspondente sobe via profile
-      Mensageria__Provedor: "${MENSAGERIA_PROVEDOR:-RabbitMQ}"
-      Mensageria__Fila: "integrar-credito-constituido-entry"
-      Mensageria__RabbitMQ__Host: "rabbitmq"
-      Mensageria__RabbitMQ__Port: "5672"
-      Mensageria__RabbitMQ__Usuario: "guest"
-      Mensageria__RabbitMQ__Senha: "guest"
-      Mensageria__Kafka__BootstrapServers: "kafka:9092"
-      Mensageria__Kafka__GrupoConsumidor: "credito-fiscal"
-      Mensageria__ServiceBus__ConnectionString: "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=dGVzdGtleQ==;UseDevelopmentEmulator=true"
-    # so o Postgres e barreira dura (migrations no startup). O broker e resolvido com retry.
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  # --- broker opcional: Kafka (profile kafka) ---
   kafka:
     image: bitnami/kafka:3.7
     container_name: credito-fiscal-kafka
@@ -75,7 +34,54 @@ services:
       ALLOW_PLAINTEXT_LISTENER: "yes"
     ports:
       - "9092:9092"
-    profiles: ["kafka"]
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: credito-fiscal-api
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=creditofiscal;Username=postgres;Password=postgres"
+      # provedor selecionavel: o default e Kafka (subido aqui); RabbitMQ/ServiceBus exigem o profile correspondente
+      Mensageria__Provedor: "${MENSAGERIA_PROVEDOR:-Kafka}"
+      Mensageria__Fila: "integrar-credito-constituido-entry"
+      Mensageria__Kafka__BootstrapServers: "kafka:9092"
+      Mensageria__Kafka__GrupoConsumidor: "credito-fiscal"
+      Mensageria__RabbitMQ__Host: "rabbitmq"
+      Mensageria__RabbitMQ__Port: "5672"
+      Mensageria__RabbitMQ__Usuario: "guest"
+      Mensageria__RabbitMQ__Senha: "guest"
+      Mensageria__ServiceBus__ConnectionString: "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=dGVzdGtleQ==;UseDevelopmentEmulator=true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # --- broker opcional: RabbitMQ (profile rabbitmq) ---
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: credito-fiscal-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles: ["rabbitmq"]
 
   # --- broker opcional: Azure ServiceBus emulator + SQL de apoio (profile servicebus) ---
   servicebus-emulator:
