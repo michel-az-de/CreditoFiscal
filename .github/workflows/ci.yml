@@ -18,11 +18,43 @@ jobs:
         with:
           global-json-file: global.json
 
+      # cacheia ~/.nuget/packages indexado pelos csproj para nao baixar tudo a cada run
+      - name: Cache de pacotes NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Restaura dependencias
         run: dotnet restore
 
       - name: Compila em Release
         run: dotnet build --configuration Release --no-restore
 
-      - name: Roda os testes
-        run: dotnet test --configuration Release --no-build --verbosity normal
+      - name: Roda os testes unitarios
+        run: dotnet test tests/CreditoFiscal.Testes/CreditoFiscal.Testes.csproj --configuration Release --no-build --verbosity normal
+
+  integracao:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configura .NET (versao do global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache de pacotes NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # o runner ubuntu-latest ja tem Docker: o Testcontainers sobe Postgres e RabbitMQ reais
+      - name: Roda os testes de integracao
+        run: dotnet test tests/CreditoFiscal.TestesIntegracao/CreditoFiscal.TestesIntegracao.csproj --configuration Release --verbosity normal

@@ -4,4 +4,5 @@ namespace CreditoFiscal.Aplicacao.Mensagens;
 public static class Filas
 {
     public const string IntegrarCreditoConstituido = "integrar-credito-constituido-entry";
+    public const string ConsultaCreditoRealizada = "consulta-credito-realizada";
 }

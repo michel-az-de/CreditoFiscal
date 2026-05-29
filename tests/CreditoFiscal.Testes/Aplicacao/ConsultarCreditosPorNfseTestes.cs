@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using CreditoFiscal.Aplicacao.Auditoria;
 using CreditoFiscal.Aplicacao.CasosDeUso;
+using CreditoFiscal.Aplicacao.Mensagens;
 using CreditoFiscal.Dominio.Abstracoes;
 using CreditoFiscal.Dominio.Entidades;
 using FluentAssertions;
@@ -19,7 +21,8 @@ public sealed class ConsultarCreditosPorNfseTestes
         var repositorio = Substitute.For<ICreditoRepository>();
         repositorio.ObterPorNumeroNfseAsync("nfse-1", Arg.Any<CancellationToken>())
             .Returns(new List<Credito> { MontarCredito("1"), MontarCredito("2") });
-        var casoDeUso = new ConsultarCreditosPorNfse(repositorio);
+        var auditoria = Substitute.For<IPublicadorAuditoria>();
+        var casoDeUso = new ConsultarCreditosPorNfse(repositorio, auditoria);
 
         var resultado = await casoDeUso.ExecutarAsync("nfse-1", CancellationToken.None);
 
@@ -33,11 +36,28 @@ public sealed class ConsultarCreditosPorNfseTestes
         var repositorio = Substitute.For<ICreditoRepository>();
         repositorio.ObterPorNumeroNfseAsync("nfse-x", Arg.Any<CancellationToken>())
             .Returns(new List<Credito>());
-        var casoDeUso = new ConsultarCreditosPorNfse(repositorio);
+        var auditoria = Substitute.For<IPublicadorAuditoria>();
+        var casoDeUso = new ConsultarCreditosPorNfse(repositorio, auditoria);
 
         var resultado = await casoDeUso.ExecutarAsync("nfse-x", CancellationToken.None);
 
         resultado.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExecutarAsync_DevePublicarAuditoriaComQuantidadeRetornada()
+    {
+        var repositorio = Substitute.For<ICreditoRepository>();
+        repositorio.ObterPorNumeroNfseAsync("nfse-2", Arg.Any<CancellationToken>())
+            .Returns(new List<Credito> { MontarCredito("3"), MontarCredito("4") });
+        var auditoria = Substitute.For<IPublicadorAuditoria>();
+        var casoDeUso = new ConsultarCreditosPorNfse(repositorio, auditoria);
+
+        await casoDeUso.ExecutarAsync("nfse-2", CancellationToken.None);
+
+        await auditoria.Received(1).PublicarConsultaAsync(
+            Arg.Is<ConsultaCreditoRealizadaDto>(e => e.Tipo == "PorNfse" && e.Chave == "nfse-2" && e.QuantidadeRetornada == 2),
+            Arg.Any<CancellationToken>());
     }
 
     private static Credito MontarCredito(string numeroCredito)

@@ -1,6 +1,6 @@
-# Padrao (RabbitMQ):   docker compose up --build
-# Com Kafka:           MENSAGERIA_PROVEDOR=Kafka docker compose --profile kafka up --build
-# Com ServiceBus:      MENSAGERIA_PROVEDOR=ServiceBus docker compose --profile servicebus up --build
+# Padrao (Kafka):       docker compose up --build
+# Com RabbitMQ:         MENSAGERIA_PROVEDOR=RabbitMQ docker compose --profile rabbitmq up --build
+# Com ServiceBus:       MENSAGERIA_PROVEDOR=ServiceBus docker compose --profile servicebus up --build
 services:
   postgres:
     image: postgres:15-alpine
@@ -19,6 +19,58 @@ services:
       timeout: 5s
       retries: 5
 
+  # imagem oficial Apache (KRaft); a bitnami/kafka saiu do Docker Hub em 2025
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: credito-fiscal-kafka
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: credito-fiscal-api
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=creditofiscal;Username=postgres;Password=postgres"
+      # provedor selecionavel: o default e Kafka (subido aqui); RabbitMQ/ServiceBus exigem o profile correspondente
+      Mensageria__Provedor: "${MENSAGERIA_PROVEDOR:-Kafka}"
+      Mensageria__Fila: "integrar-credito-constituido-entry"
+      Mensageria__Kafka__BootstrapServers: "kafka:9092"
+      Mensageria__Kafka__GrupoConsumidor: "credito-fiscal"
+      Mensageria__RabbitMQ__Host: "rabbitmq"
+      Mensageria__RabbitMQ__Port: "5672"
+      Mensageria__RabbitMQ__Usuario: "guest"
+      Mensageria__RabbitMQ__Senha: "guest"
+      Mensageria__ServiceBus__ConnectionString: "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=dGVzdGtleQ==;UseDevelopmentEmulator=true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # --- broker opcional: RabbitMQ (profile rabbitmq) ---
   rabbitmq:
     image: rabbitmq:3-management
     container_name: credito-fiscal-rabbitmq
@@ -33,49 +85,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: credito-fiscal-api
-    ports:
-      - "8080:8080"
-    environment:
-      ASPNETCORE_URLS: "http://+:8080"
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=creditofiscal;Username=postgres;Password=postgres"
-      # provedor selecionavel; o broker correspondente sobe via profile
-      Mensageria__Provedor: "${MENSAGERIA_PROVEDOR:-RabbitMQ}"
-      Mensageria__Fila: "integrar-credito-constituido-entry"
-      Mensageria__RabbitMQ__Host: "rabbitmq"
-      Mensageria__RabbitMQ__Port: "5672"
-      Mensageria__RabbitMQ__Usuario: "guest"
-      Mensageria__RabbitMQ__Senha: "guest"
-      Mensageria__Kafka__BootstrapServers: "kafka:9092"
-      Mensageria__Kafka__GrupoConsumidor: "credito-fiscal"
-      Mensageria__ServiceBus__ConnectionString: "Endpoint=sb://servicebus-emulator;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=dGVzdGtleQ==;UseDevelopmentEmulator=true"
-    # so o Postgres e barreira dura (migrations no startup). O broker e resolvido com retry.
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  # --- broker opcional: Kafka (profile kafka) ---
-  kafka:
-    image: bitnami/kafka:3.7
-    container_name: credito-fiscal-kafka
-    environment:
-      KAFKA_CFG_NODE_ID: "0"
-      KAFKA_CFG_PROCESS_ROLES: "controller,broker"
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "0@kafka:9093"
-      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
-      ALLOW_PLAINTEXT_LISTENER: "yes"
-    ports:
-      - "9092:9092"
-    profiles: ["kafka"]
+    profiles: ["rabbitmq"]
 
   # --- broker opcional: Azure ServiceBus emulator + SQL de apoio (profile servicebus) ---
   servicebus-emulator:

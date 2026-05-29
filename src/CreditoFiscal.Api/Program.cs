@@ -1,4 +1,5 @@
 using CreditoFiscal.Api.BackgroundServices;
+using CreditoFiscal.Api.HealthChecks;
 using CreditoFiscal.Api.Middlewares;
 using CreditoFiscal.Api.Observabilidade;
 using CreditoFiscal.Aplicacao.CasosDeUso;
@@ -15,7 +16,6 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,7 +54,7 @@ builder.Services.AdicionarCasosDeUso();
 
 builder.Services.AddHealthChecks()
     .AddNpgSql(builder.Configuration.GetConnectionString("Postgres")!, name: "postgres", tags: new[] { "ready" })
-    .AddRabbitMQ(sp => sp.GetRequiredService<IConnection>(), name: "rabbitmq", tags: new[] { "ready" });
+    .AdicionarHealthCheckMensageria(builder.Configuration);
 
 var app = builder.Build();
 
@@ -76,8 +76,11 @@ app.UseSwaggerUI();
 
 app.MapControllers();
 
-// /self = liveness (processo de pe); /ready = readiness (Postgres e RabbitMQ alcancaveis)
+// /self = liveness (processo de pe); /ready = readiness (Postgres e o broker configurado alcancaveis)
 app.MapHealthChecks("/self", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/ready", new HealthCheckOptions { Predicate = registro => registro.Tags.Contains("ready") });
 
 app.Run();
+
+// expoe Program pro WebApplicationFactory dos testes de integracao
+public partial class Program { }

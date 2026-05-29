@@ -1,9 +1,10 @@
 # CreditoFiscal
 
 Microsserviço .NET 6 para consulta de créditos fiscais constituídos (ISSQN / NFS-e).
-A API recebe créditos, publica cada um numa fila do RabbitMQ; um `BackgroundService`
-consome a fila e persiste no PostgreSQL de forma **idempotente**; dois `GET`s consultam
-os créditos por NFS-e e por número de crédito.
+A API recebe créditos, publica cada um num tópico do broker configurado (Kafka por padrão,
+com RabbitMQ e Azure Service Bus como alternativas); um `BackgroundService` consome o tópico
+e persiste no PostgreSQL de forma **idempotente**; dois `GET`s consultam os créditos por
+NFS-e e por número de crédito.
 
 ## Fluxo
 
@@ -11,7 +12,7 @@ os créditos por NFS-e e por número de crédito.
 POST /api/creditos/integrar-credito-constituido
         │  (valida e publica 1 mensagem por crédito)
         ▼
-   RabbitMQ  ──fila: integrar-credito-constituido-entry──►  CreditoConsumer (BackgroundService)
+   Kafka    ──tópico: integrar-credito-constituido-entry──►  CreditoConsumer (BackgroundService)
                                                                  │ polling 500ms, lote de 10
                                                                  │ idempotência (ver abaixo)
                                                                  ▼
@@ -42,26 +43,27 @@ Pré-requisito: Docker.
 docker compose up --build
 ```
 
-Sobe Postgres, RabbitMQ e a API. A API espera o Postgres ficar saudável (barreira para aplicar as
-migrations no startup) e resolve a conexão com o broker via retry. Fica disponível em:
+Sobe Postgres, Kafka (broker local em KRaft) e a API. A API espera o Postgres e o Kafka ficarem
+saudáveis antes de aceitar tráfego (Postgres é barreira para aplicar as migrations no startup).
+Fica disponível em:
 
 - API: `http://localhost:8080`
 - Swagger: `http://localhost:8080/swagger`
-- Painel RabbitMQ: `http://localhost:15672` (guest / guest)
 
 ### Trocar de provedor de mensageria
 
-O provedor é escolhido por configuração (`Mensageria:Provedor`). Os adapters de **Kafka** e **ServiceBus** sobem em *profiles* do compose:
+O provedor é escolhido por configuração (`Mensageria:Provedor`). **Kafka** é o padrão.
+Os adapters de **RabbitMQ** e **ServiceBus** sobem em *profiles* do compose:
 
 ```bash
-# Kafka (broker local em KRaft)
-MENSAGERIA_PROVEDOR=Kafka docker compose --profile kafka up --build
+# RabbitMQ (com painel de gerência em http://localhost:15672 — guest/guest)
+MENSAGERIA_PROVEDOR=RabbitMQ docker compose --profile rabbitmq up --build
 
 # ServiceBus (emulator oficial + SQL de apoio)
 MENSAGERIA_PROVEDOR=ServiceBus docker compose --profile servicebus up --build
 ```
 
-A config de cada provedor fica aninhada no `appsettings.json` (`Mensageria:RabbitMQ`, `Mensageria:Kafka`, `Mensageria:ServiceBus`) e o compose sobrepõe por variável de ambiente. A fila `integrar-credito-constituido-entry` é criada automaticamente: RabbitMQ via `CriadorDeFilas`, Kafka via auto-create de tópico, ServiceBus via `servicebus-emulator-config.json`.
+A config de cada provedor fica aninhada no `appsettings.json` (`Mensageria:Kafka`, `Mensageria:RabbitMQ`, `Mensageria:ServiceBus`) e o compose sobrepõe por variável de ambiente. O tópico/fila `integrar-credito-constituido-entry` é criado automaticamente: Kafka via auto-create de tópico, RabbitMQ via `CriadorDeFilas`, ServiceBus via `servicebus-emulator-config.json`.
 
 Para rodar build e testes localmente (precisa do SDK .NET 6 — versão pinada no `global.json`):
 
@@ -95,13 +97,13 @@ Recebe um **array** de créditos e publica cada um na fila. `simplesNacional` ch
 - **400** `ProblemDetails` se algum `simplesNacional` for diferente de `"Sim"`/`"Não"` — o lote inteiro é rejeitado e **nada** é publicado.
 
 ### GET `/api/creditos/{numeroNfse}`
-Lista os créditos da NFS-e. **200** com array, **404** se não houver nenhum.
+Lista os créditos da NFS-e. **200** com array, **404** se não houver nenhum. Cada GET publica um evento `ConsultaCreditoRealizadaDto` no tópico/fila `consulta-credito-realizada` (auditoria — ver decisão técnica abaixo).
 
 ### GET `/api/creditos/credito/{numeroCredito}`
-Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Sim"`/`"Não"`), **404** se não existir.
+Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Sim"`/`"Não"`), **404** se não existir. Também publica auditoria em `consulta-credito-realizada`.
 
 ### GET `/self` e `/ready`
-`/self` = liveness (200 enquanto o processo está de pé). `/ready` = readiness (200 quando Postgres **e** RabbitMQ respondem).
+`/self` = liveness (200 enquanto o processo está de pé). `/ready` = readiness (200 quando Postgres **e** o broker configurado — Kafka, RabbitMQ ou ServiceBus — respondem). O check de mensageria é selecionado por `Mensageria:Provedor` em runtime.
 
 ## Decisões técnicas
 
@@ -113,10 +115,11 @@ Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Si
 - **Conexão resiliente** — `IConnection` é singleton criado com retry manual (6 tentativas, backoff 2/4/6/8/10s) e `AutomaticRecoveryEnabled = true`, porque o broker pode subir depois da API.
 - **Data fiscal sem fuso** — `ConversorDeDataSemFusoHorario` lê só o dia (qualquer `Z`/offset que o cliente mande) e grava `Kind=Unspecified`, porque o Npgsql 6 quebra ao escrever `DateTime` `Utc` em coluna `date`. Também serializa como `"yyyy-MM-dd"`.
 - **Segregação de interface (ISP)** — em vez de um `IBarramentoDeMensagens` único, há `IMensagemPublisher` e `IMensagemConsumer` separados (o controller só publica, o consumer só consome). Cada adapter implementa as duas, e o DI registra **a mesma instância singleton** para ambas.
-- **Múltiplos provedores via Factory (OCP)** — `AdicionarMensageria` escolhe o adapter por config (`Mensageria:Provedor`): **RabbitMQ** (padrão), **Kafka** (`AdaptadorKafka`) ou **ServiceBus** (`AdaptadorServiceBus`). Trocar de broker é mudar uma string — sem tocar em controller nem consumer. *Caveat honesto:* o modelo de streaming/offset do Kafka não tem ack/requeue por mensagem como AMQP/ServiceBus; no `AdaptadorKafka`, `Confirmar` faz commit de offset e `Rejeitar` faz `seek` de volta (re-leitura), documentado no código.
+- **Múltiplos provedores via Factory (OCP)** — `AdicionarMensageria` escolhe o adapter por config (`Mensageria:Provedor`): **Kafka** (padrão, `AdaptadorKafka`), **RabbitMQ** (`AdaptadorRabbitMq`) ou **ServiceBus** (`AdaptadorServiceBus`). Trocar de broker é mudar uma string — sem tocar em controller nem consumer. O health check de `/ready` também segue a config (ver `MensageriaHealthChecksExtensions`), então `dotnet test` e `docker compose --profile rabbitmq` continuam saudáveis sem ajuste manual. *Caveat honesto:* o modelo de streaming/offset do Kafka não tem ack/requeue por mensagem como AMQP/ServiceBus; no `AdaptadorKafka`, `Confirmar` faz commit de offset e `Rejeitar` faz `seek` de volta (re-leitura), documentado no código.
 - **Unit of Work** — o consumer depende só de abstrações do domínio (`ICreditoRepository` + `IUnidadeDeTrabalho`), sem tocar o `DbContext` concreto. Mantém o consumer testável e nas camadas certas.
 - **Camada de aplicação (projeto próprio)** — os casos de uso vivem em `CreditoFiscal.Aplicacao`, uma DLL que depende só do domínio. Os controllers apenas traduzem HTTP e delegam; nenhum controller fala direto com repositório ou publisher. Camada reutilizável fora da API.
 - **Middleware de erro** — borda única: `ArgumentException` → **400** (`Warning`), demais → **500** (`Error` com log completo no servidor, mas o corpo nunca expõe stack trace nem detalhe interno).
+- **Publisher de auditoria de consultas (desafio extra)** — cada GET (`PorNfse` ou `PorNumero`) publica um `ConsultaCreditoRealizadaDto` (tipo + chave + quantidade retornada + timestamp UTC) no tópico/fila `consulta-credito-realizada`. O `PublicadorAuditoria` engole exceções do broker e loga `Warning`: auditoria é efeito colateral e **nunca derruba a consulta** — se o Kafka estiver fora, o GET continua respondendo 200. Reutiliza o mesmo `IMensagemPublisher` da integração, então a auditoria sai pelo broker selecionado em `Mensageria:Provedor`.
 
 ## Idempotência e garantia de entrega
 
@@ -129,26 +132,42 @@ Se cair entre persistir e confirmar, a reentrega cai no filtro 1 (ou no índice 
 
 ## Testes
 
+**Unitários** (`tests/CreditoFiscal.Testes`) — 53 testes (xUnit + FluentAssertions + NSubstitute +
+EF Core InMemory), escritos em TDD (vermelho → verde) nas fases de lógica: domínio, repositório,
+conversor, middleware, controllers, casos de uso e o `CreditoConsumer` (incluindo `DbUpdateException`).
+
 ```bash
-dotnet test
+dotnet test tests/CreditoFiscal.Testes/CreditoFiscal.Testes.csproj
 ```
 
-43 testes (xUnit + FluentAssertions + NSubstitute + EF Core InMemory), escritos em TDD
-(vermelho → verde) nas fases de lógica: domínio, repositório, conversor, middleware,
-controllers e o `CreditoConsumer` (incluindo o caso de `DbUpdateException`).
+**Integração** (`tests/CreditoFiscal.TestesIntegracao`) — sobem Postgres e RabbitMQ reais via
+**Testcontainers** e a API em processo (`WebApplicationFactory`), exercitando o fluxo completo
+POST → fila → consumer → banco → GET, idempotência, entrada inválida (400) e readiness. Precisa de Docker.
+
+```bash
+dotnet test tests/CreditoFiscal.TestesIntegracao/CreditoFiscal.TestesIntegracao.csproj
+```
 
 ## CI
 
-`.github/workflows/ci.yml` roda `restore` + `build -c Release` + `test` em todo `push` e
-`pull_request` para `main` e `develop`, usando o SDK do `global.json`.
+`.github/workflows/ci.yml` roda em todo `push`/`pull_request` para `main` e `develop`, com o SDK do
+`global.json`, em dois jobs:
 
-## Validação manual (com Docker)
+- **build-e-teste** — `restore` + `build -c Release` + testes unitários (não precisa de Docker).
+- **integracao** — testes de integração com Testcontainers (o runner `ubuntu-latest` já tem Docker).
 
-1. `docker compose up --build` e confira `Now listening on...` no log da API.
-2. `GET /self` e `GET /ready` → 200.
-3. `POST` da Postman Collection (`docs/postman/`) → 202; consulte por NFS-e e por número.
-4. **POST duplicado** do mesmo `numeroCredito` → no log do consumer aparece o `Warning` "duplicata ignorada".
-5. **Teste de carga** (`carga/`): rode o cenário 1, **aguarde a fila drenar** (`docker exec credito-fiscal-rabbitmq rabbitmqctl list_queues name messages`), depois os cenários 2 e 3. Detalhes em `docs/carga/resultados.md`.
+## Validação executada (stack real)
+
+A stack foi subida de verdade (`docker compose up --build`, em WSL2 + Docker 29) e o fluxo
+ponta-a-ponta foi exercitado **com o perfil RabbitMQ** (`MENSAGERIA_PROVEDOR=RabbitMQ docker compose --profile rabbitmq up --build`), por ter o painel de gerência que ajuda a inspecionar fila e mensagens durante o teste:
+
+1. `/self` e `/ready` → **200** (Postgres e RabbitMQ alcançáveis).
+2. `POST` de um lote → **202**; o consumer persistiu; `GET` por NFS-e e por número → **200** com os dados.
+3. **Reenvio do mesmo lote** → continua 1 linha por crédito; o log do consumer mostra `... ja existe; duplicata ignorada`.
+4. `POST` com `simplesNacional` inválido → **400** (ProblemDetails).
+5. **k6** nos três cenários, com métricas reais em `docs/carga/resultados.md` (pico 214 req/s, leitura 1.361 req/s, ambos 0% de falha).
+
+Os adapters Kafka e ServiceBus passam pelos testes unitários e o adapter selecionado é exercitado de ponta a ponta nos testes de integração com Testcontainers (que sobem RabbitMQ por ser o broker mais leve para o Testcontainers).
 
 ## Convenções
 
@@ -157,6 +176,7 @@ controllers e o `CreditoConsumer` (incluindo o caso de `DbUpdateException`).
 
 ## Limitações conhecidas
 
-- O ambiente de scaffold **não tinha Docker**, então a stack não foi subida aqui e o **k6 não foi executado** (`docs/carga/resultados.md` está como `NAO EXECUTADO`, sem métricas inventadas). Build e testes são validados pelo CI a cada push.
-- Propagação de `CancellationToken` dentro de uma chamada AMQP única não é possível no driver síncrono 6.x (checado entre chamadas).
-- Os adapters **Kafka** e **ServiceBus** têm teste de seleção da factory, mas o round-trip real (produzir/consumir) é validação manual — sem brokers na sessão, igual ao RabbitMQ. O health check `/ready` está cabeado para o RabbitMQ padrão; trocar o provedor pede ajustar o check.
+- O teste de carga (`docs/carga/resultados.md`) foi rodado com o perfil **RabbitMQ**, não com o Kafka padrão. O comportamento qualitativo (POST aceita 100%, consumer é o gargalo) é o mesmo, mas os números absolutos de throughput vão variar para Kafka — re-rodar é um passo simples (`MENSAGERIA_PROVEDOR=Kafka docker compose up --build` e executar os mesmos cenários k6).
+- O round-trip real de **ServiceBus** depende de subir o emulator (`--profile servicebus`); os adapters têm cobertura de unit test (factory + thread-safety), mas o teste de integração com Testcontainers usa RabbitMQ por ser o broker mais leve para subir em CI.
+- Propagação de `CancellationToken` dentro de uma chamada AMQP única não é possível no driver síncrono RabbitMQ 6.x (checado entre chamadas).
+- Sob stress extremo (500 VUs no k6 com RabbitMQ) o POST não falha, mas a latência cresce muito: o consumer drena ~20 msg/s, então o broker vira o gargalo de vazão (ver `docs/carga/resultados.md`).

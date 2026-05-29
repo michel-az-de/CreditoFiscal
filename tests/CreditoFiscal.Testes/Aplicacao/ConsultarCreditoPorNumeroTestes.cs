@@ -1,7 +1,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using CreditoFiscal.Aplicacao.Auditoria;
 using CreditoFiscal.Aplicacao.CasosDeUso;
+using CreditoFiscal.Aplicacao.Mensagens;
 using CreditoFiscal.Dominio.Abstracoes;
 using CreditoFiscal.Dominio.Entidades;
 using FluentAssertions;
@@ -17,7 +19,8 @@ public sealed class ConsultarCreditoPorNumeroTestes
     {
         var repositorio = Substitute.For<ICreditoRepository>();
         repositorio.ObterPorNumeroCreditoAsync("123", Arg.Any<CancellationToken>()).Returns(MontarCredito("123"));
-        var casoDeUso = new ConsultarCreditoPorNumero(repositorio);
+        var auditoria = Substitute.For<IPublicadorAuditoria>();
+        var casoDeUso = new ConsultarCreditoPorNumero(repositorio, auditoria);
 
         var resultado = await casoDeUso.ExecutarAsync("123", CancellationToken.None);
 
@@ -31,11 +34,27 @@ public sealed class ConsultarCreditoPorNumeroTestes
     {
         var repositorio = Substitute.For<ICreditoRepository>();
         repositorio.ObterPorNumeroCreditoAsync("naoexiste", Arg.Any<CancellationToken>()).Returns((Credito?)null);
-        var casoDeUso = new ConsultarCreditoPorNumero(repositorio);
+        var auditoria = Substitute.For<IPublicadorAuditoria>();
+        var casoDeUso = new ConsultarCreditoPorNumero(repositorio, auditoria);
 
         var resultado = await casoDeUso.ExecutarAsync("naoexiste", CancellationToken.None);
 
         resultado.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ExecutarAsync_DevePublicarAuditoriaComChaveETipoCorretos()
+    {
+        var repositorio = Substitute.For<ICreditoRepository>();
+        repositorio.ObterPorNumeroCreditoAsync("ABC-1", Arg.Any<CancellationToken>()).Returns(MontarCredito("ABC-1"));
+        var auditoria = Substitute.For<IPublicadorAuditoria>();
+        var casoDeUso = new ConsultarCreditoPorNumero(repositorio, auditoria);
+
+        await casoDeUso.ExecutarAsync("ABC-1", CancellationToken.None);
+
+        await auditoria.Received(1).PublicarConsultaAsync(
+            Arg.Is<ConsultaCreditoRealizadaDto>(e => e.Tipo == "PorNumero" && e.Chave == "ABC-1" && e.QuantidadeRetornada == 1),
+            Arg.Any<CancellationToken>());
     }
 
     private static Credito MontarCredito(string numeroCredito)
