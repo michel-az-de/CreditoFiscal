@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using CreditoFiscal.Api.Mensagens;
+using CreditoFiscal.Api.Observabilidade;
 using CreditoFiscal.Dominio.Abstracoes;
 using CreditoFiscal.Dominio.Entidades;
 using Microsoft.EntityFrameworkCore;
@@ -64,6 +65,10 @@ public sealed class CreditoConsumer : BackgroundService
         CancellationToken ct)
     {
         var dto = mensagem.Conteudo;
+
+        using var atividade = Telemetria.Fonte.StartActivity("processar-credito");
+        atividade?.SetTag("credito.numero", dto.NumeroCredito);
+
         try
         {
             // idempotencia 1: ja persistido -> confirma sem reprocessar

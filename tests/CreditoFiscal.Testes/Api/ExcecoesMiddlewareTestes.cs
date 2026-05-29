@@ -106,7 +106,7 @@ public sealed class ExcecoesMiddlewareTestes
     {
         public List<LogLevel> Niveis { get; } = new List<LogLevel>();
 
-        public IDisposable BeginScope<TState>(TState state)
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull
         {
             return new EscopoVazio();
         }
