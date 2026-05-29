@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace CreditoFiscal.Dominio.Abstracoes;
 
-public interface IPublicadorDeMensagens
+public interface IMensagemPublisher
 {
     Task PublicarAsync<T>(string fila, T mensagem, CancellationToken ct);
 }
