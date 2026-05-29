@@ -5,6 +5,7 @@ WORKDIR /src
 # so os manifestos primeiro: cacheia o restore enquanto o codigo nao muda
 COPY global.json Directory.Build.props CreditoFiscal.sln ./
 COPY src/CreditoFiscal.Dominio/CreditoFiscal.Dominio.csproj src/CreditoFiscal.Dominio/
+COPY src/CreditoFiscal.Aplicacao/CreditoFiscal.Aplicacao.csproj src/CreditoFiscal.Aplicacao/
 COPY src/CreditoFiscal.Infraestrutura/CreditoFiscal.Infraestrutura.csproj src/CreditoFiscal.Infraestrutura/
 COPY src/CreditoFiscal.Api/CreditoFiscal.Api.csproj src/CreditoFiscal.Api/
 RUN dotnet restore src/CreditoFiscal.Api/CreditoFiscal.Api.csproj
