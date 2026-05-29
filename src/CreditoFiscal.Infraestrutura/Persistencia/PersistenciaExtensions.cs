@@ -12,6 +12,7 @@ public static class PersistenciaExtensions
         var conexao = configuration.GetConnectionString("Postgres");
         services.AddDbContext<CreditoFiscalDbContext>(opcoes => opcoes.UseNpgsql(conexao));
         services.AddScoped<ICreditoRepository, CreditoRepository>();
+        services.AddScoped<IUnidadeDeTrabalho, UnidadeDeTrabalho>();
         return services;
     }
 }
