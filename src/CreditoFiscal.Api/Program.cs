@@ -5,6 +5,7 @@ using CreditoFiscal.Infraestrutura.Mensageria;
 using CreditoFiscal.Infraestrutura.Persistencia;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
@@ -25,6 +26,13 @@ builder.Services.AddHealthChecks()
     .AddRabbitMQ(sp => sp.GetRequiredService<IConnection>(), name: "rabbitmq", tags: new[] { "ready" });
 
 var app = builder.Build();
+
+// aplica migrations pendentes no startup: schema pronto antes de servir
+using (var escopo = app.Services.CreateScope())
+{
+    var contexto = escopo.ServiceProvider.GetRequiredService<CreditoFiscalDbContext>();
+    await contexto.Database.MigrateAsync();
+}
 
 // primeiro do pipeline: captura excecao de tudo que vem abaixo
 app.UseMiddleware<ExcecoesMiddleware>();
