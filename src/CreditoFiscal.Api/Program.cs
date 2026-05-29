@@ -1,3 +1,4 @@
+using System;
 using CreditoFiscal.Api.BackgroundServices;
 using CreditoFiscal.Api.HealthChecks;
 using CreditoFiscal.Api.Middlewares;
@@ -52,8 +53,11 @@ builder.Services.AdicionarMensageria(builder.Configuration);
 builder.Services.AddHostedService<CreditoConsumer>();
 builder.Services.AdicionarCasosDeUso();
 
+var conexaoPostgres = builder.Configuration.GetConnectionString("Postgres")
+    ?? throw new InvalidOperationException("ConnectionStrings:Postgres nao configurada.");
+
 builder.Services.AddHealthChecks()
-    .AddNpgSql(builder.Configuration.GetConnectionString("Postgres")!, name: "postgres", tags: new[] { "ready" })
+    .AddNpgSql(conexaoPostgres, name: "postgres", tags: new[] { "ready" })
     .AdicionarHealthCheckMensageria(builder.Configuration);
 
 var app = builder.Build();
