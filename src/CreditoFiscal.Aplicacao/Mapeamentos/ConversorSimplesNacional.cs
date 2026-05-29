@@ -1,7 +1,7 @@
 using System;
 using CreditoFiscal.Dominio.Entidades;
 
-namespace CreditoFiscal.Api.Mapeamentos;
+namespace CreditoFiscal.Aplicacao.Mapeamentos;
 
 // anti-corruption: traduz o "Sim"/"Não" do JSON pro enum do dominio
 public static class ConversorSimplesNacional

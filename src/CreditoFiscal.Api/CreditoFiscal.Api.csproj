@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\CreditoFiscal.Dominio\CreditoFiscal.Dominio.csproj" />
     <ProjectReference Include="..\CreditoFiscal.Infraestrutura\CreditoFiscal.Infraestrutura.csproj" />
+    <ProjectReference Include="..\CreditoFiscal.Aplicacao\CreditoFiscal.Aplicacao.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,4 @@
-namespace CreditoFiscal.Api.Mensagens;
+namespace CreditoFiscal.Aplicacao.Mensagens;
 
 // nome unico da fila, compartilhado entre publisher e consumer (evita typo divergente)
 public static class Filas

@@ -1,5 +1,5 @@
 using System;
-using CreditoFiscal.Api.Mapeamentos;
+using CreditoFiscal.Aplicacao.Mapeamentos;
 using CreditoFiscal.Dominio.Entidades;
 using FluentAssertions;
 using Xunit;

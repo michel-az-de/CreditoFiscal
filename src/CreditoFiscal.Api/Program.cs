@@ -1,6 +1,7 @@
 using CreditoFiscal.Api.BackgroundServices;
 using CreditoFiscal.Api.Middlewares;
 using CreditoFiscal.Api.Observabilidade;
+using CreditoFiscal.Aplicacao.CasosDeUso;
 using CreditoFiscal.Infraestrutura.Json;
 using CreditoFiscal.Infraestrutura.Mensageria;
 using CreditoFiscal.Infraestrutura.Persistencia;
@@ -49,6 +50,7 @@ builder.Services.AddOpenTelemetry()
 builder.Services.AdicionarPersistencia(builder.Configuration);
 builder.Services.AdicionarMensageria(builder.Configuration);
 builder.Services.AddHostedService<CreditoConsumer>();
+builder.Services.AdicionarCasosDeUso();
 
 builder.Services.AddHealthChecks()
     .AddNpgSql(builder.Configuration.GetConnectionString("Postgres")!, name: "postgres", tags: new[] { "ready" })
