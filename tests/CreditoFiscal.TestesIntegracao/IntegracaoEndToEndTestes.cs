@@ -77,6 +77,57 @@ public sealed class IntegracaoEndToEndTestes : IClassFixture<IntegracaoFixture>
     }
 
     [Fact]
+    public async Task Numero_credito_vazio_retorna_400_pela_validacao_de_modelo()
+    {
+        // ModelState do [ApiController] devolve 400 antes do caso de uso rodar -> nada chega na fila
+        var lote = new[]
+        {
+            new
+            {
+                numeroCredito = "",
+                numeroNfse = "INT-NFSE-5",
+                dataConstituicao = "2026-02-25",
+                valorIssqn = 1500.75m,
+                tipoCredito = "ISSQN",
+                simplesNacional = "Sim",
+                aliquota = 5.0m,
+                valorFaturado = 30000.0m,
+                valorDeducao = 5000.0m,
+                baseCalculo = 25000.0m
+            }
+        };
+
+        var resposta = await _fixture.Cliente.PostAsJsonAsync(Endpoint, lote);
+
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Aliquota_fora_do_intervalo_retorna_400()
+    {
+        var lote = new[]
+        {
+            new
+            {
+                numeroCredito = "INT-VAL-6",
+                numeroNfse = "INT-NFSE-6",
+                dataConstituicao = "2026-02-25",
+                valorIssqn = 1500.75m,
+                tipoCredito = "ISSQN",
+                simplesNacional = "Sim",
+                aliquota = 999.0m,
+                valorFaturado = 30000.0m,
+                valorDeducao = 5000.0m,
+                baseCalculo = 25000.0m
+            }
+        };
+
+        var resposta = await _fixture.Cliente.PostAsJsonAsync(Endpoint, lote);
+
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task Readiness_fica_healthy_com_dependencias_de_pe()
     {
         var resposta = await _fixture.Cliente.GetAsync("/ready");
