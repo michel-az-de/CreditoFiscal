@@ -1,0 +1,239 @@
+{
+  "info": {
+    "name": "CreditoFiscal",
+    "description": "Consulta de creditos fiscais (ISSQN/NFS-e). Fluxo: POST publica na fila, o consumidor persiste, os GETs consultam. Ajuste a variavel baseUrl conforme o ambiente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "numeroNfse",
+      "value": "7891011"
+    },
+    {
+      "key": "numeroCredito",
+      "value": "123456"
+    }
+  ],
+  "item": [
+    {
+      "name": "Integrar creditos constituidos (202)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/creditos/integrar-credito-constituido",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "creditos",
+            "integrar-credito-constituido"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "[\n  {\n    \"numeroCredito\": \"123456\",\n    \"numeroNfse\": \"7891011\",\n    \"dataConstituicao\": \"2024-02-25\",\n    \"valorIssqn\": 1500.75,\n    \"tipoCredito\": \"ISSQN\",\n    \"simplesNacional\": \"Sim\",\n    \"aliquota\": 5.0,\n    \"valorFaturado\": 30000.00,\n    \"valorDeducao\": 5000.00,\n    \"baseCalculo\": 25000.00\n  },\n  {\n    \"numeroCredito\": \"789012\",\n    \"numeroNfse\": \"7891011\",\n    \"dataConstituicao\": \"2024-02-26\",\n    \"valorIssqn\": 1200.50,\n    \"tipoCredito\": \"ISSQN\",\n    \"simplesNacional\": \"Não\",\n    \"aliquota\": 4.5,\n    \"valorFaturado\": 25000.00,\n    \"valorDeducao\": 4000.00,\n    \"baseCalculo\": 21000.00\n  }\n]"
+        },
+        "description": "Publica cada credito individualmente na fila. Responde 202 com { success: true }."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"responde 202 Accepted\", function () {",
+              "    pm.response.to.have.status(202);",
+              "});",
+              "pm.test(\"corpo traz success true\", function () {",
+              "    pm.expect(pm.response.json().success).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Integrar com SimplesNacional invalido (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/creditos/integrar-credito-constituido",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "creditos",
+            "integrar-credito-constituido"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "[\n  {\n    \"numeroCredito\": \"999999\",\n    \"numeroNfse\": \"7891011\",\n    \"dataConstituicao\": \"2024-02-27\",\n    \"valorIssqn\": 1000.00,\n    \"tipoCredito\": \"ISSQN\",\n    \"simplesNacional\": \"Talvez\",\n    \"aliquota\": 5.0,\n    \"valorFaturado\": 20000.00,\n    \"valorDeducao\": 3000.00,\n    \"baseCalculo\": 17000.00\n  }\n]"
+        },
+        "description": "SimplesNacional fora de Sim/Não derruba o lote: o middleware traduz a ArgumentException em 400."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"responde 400 Bad Request\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Consultar creditos por NFS-e (200)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/creditos/{{numeroNfse}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "creditos",
+            "{{numeroNfse}}"
+          ]
+        },
+        "description": "Lista os creditos da NFS-e. Rode depois que o consumidor processou o POST (polling de 500ms)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"responde 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"retorna uma lista\", function () {",
+              "    pm.expect(pm.response.json()).to.be.an(\"array\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Consultar credito por numero (200)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/creditos/credito/{{numeroCredito}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "creditos",
+            "credito",
+            "{{numeroCredito}}"
+          ]
+        },
+        "description": "Retorna um credito especifico. SimplesNacional volta como Sim/Não."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"responde 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"numeroCredito confere\", function () {",
+              "    pm.expect(pm.response.json().numeroCredito).to.eql(pm.variables.get(\"numeroCredito\"));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Liveness (/self)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/self",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "self"
+          ]
+        },
+        "description": "Liveness: 200 enquanto o processo esta de pe."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"responde 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Readiness (/ready)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/ready",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ready"
+          ]
+        },
+        "description": "Readiness: 200 quando Postgres e RabbitMQ estao alcancaveis."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"responde 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
