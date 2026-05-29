@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.OpenApi.Models;
 using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers().AddJsonOptions(opcoes =>
 {
     opcoes.JsonSerializerOptions.Converters.Add(new ConversorDeDataSemFusoHorario());
+});
+
+// Swagger sempre on (sem guard de ambiente), como o enunciado pede
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(opcoes =>
+{
+    opcoes.SwaggerDoc("v1", new OpenApiInfo { Title = "CreditoFiscal", Version = "v1" });
 });
 
 builder.Services.AdicionarPersistencia(builder.Configuration);
@@ -36,6 +44,9 @@ using (var escopo = app.Services.CreateScope())
 
 // primeiro do pipeline: captura excecao de tudo que vem abaixo
 app.UseMiddleware<ExcecoesMiddleware>();
+
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.MapControllers();
 
