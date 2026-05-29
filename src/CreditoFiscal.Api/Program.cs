@@ -81,3 +81,6 @@ app.MapHealthChecks("/self", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/ready", new HealthCheckOptions { Predicate = registro => registro.Tags.Contains("ready") });
 
 app.Run();
+
+// expoe Program pro WebApplicationFactory dos testes de integracao
+public partial class Program { }
