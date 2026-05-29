@@ -1,10 +1,8 @@
 using System;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using CreditoFiscal.Dominio.Abstracoes;
-using CreditoFiscal.Infraestrutura.Json;
 using RabbitMQ.Client;
 
 namespace CreditoFiscal.Infraestrutura.Mensageria;
@@ -12,8 +10,6 @@ namespace CreditoFiscal.Infraestrutura.Mensageria;
 // adapter RabbitMQ: so a IConnection e compartilhada; o IModel vive local (nao e thread-safe)
 public sealed class AdaptadorRabbitMq : IMensagemPublisher, IMensagemConsumer
 {
-    private static readonly JsonSerializerOptions OpcoesJson = CriarOpcoes();
-
     private readonly IConnection _conexao;
 
     public AdaptadorRabbitMq(IConnection conexao)
@@ -27,7 +23,7 @@ public sealed class AdaptadorRabbitMq : IMensagemPublisher, IMensagemConsumer
         ct.ThrowIfCancellationRequested();
 
         using var canal = _conexao.CreateModel();
-        var corpo = JsonSerializer.SerializeToUtf8Bytes(mensagem, OpcoesJson);
+        var corpo = JsonSerializer.SerializeToUtf8Bytes(mensagem, OpcoesJsonMensageria.Padrao);
 
         var propriedades = canal.CreateBasicProperties();
         propriedades.Persistent = true;
@@ -45,7 +41,7 @@ public sealed class AdaptadorRabbitMq : IMensagemPublisher, IMensagemConsumer
         var canal = _conexao.CreateModel();
         try
         {
-            IConsumerSession<T> sessao = new RabbitMqConsumerSession<T>(canal, fila, maximo, timeout, OpcoesJson);
+            IConsumerSession<T> sessao = new RabbitMqConsumerSession<T>(canal, fila, maximo, timeout, OpcoesJsonMensageria.Padrao);
             return Task.FromResult(sessao);
         }
         catch
@@ -53,13 +49,5 @@ public sealed class AdaptadorRabbitMq : IMensagemPublisher, IMensagemConsumer
             canal.Dispose();
             throw;
         }
-    }
-
-    private static JsonSerializerOptions CriarOpcoes()
-    {
-        var opcoes = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        opcoes.Converters.Add(new ConversorDeDataSemFusoHorario());
-        opcoes.Converters.Add(new JsonStringEnumConverter());
-        return opcoes;
     }
 }
