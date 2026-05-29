@@ -62,6 +62,32 @@ public sealed class ExcecoesMiddlewareTestes
     }
 
     [Fact]
+    public async Task InvokeAsync_QuandoBadHttpRequestException_DeveResponderComStatusDaException()
+    {
+        // 413 do RequestSizeLimit (e demais 4xx do leitor de body do MVC) chega aqui:
+        // o input formatter so captura JsonException/FormatException/OverflowException,
+        // entao BadHttpRequestException propagaria para o catch generico (500) sem o branch dedicado.
+        var contexto = CriarContexto();
+        var logger = new LoggerFalso<ExcecoesMiddleware>();
+
+        Task Proximo(HttpContext ctx)
+        {
+            throw new BadHttpRequestException("Request body too large.", StatusCodes.Status413PayloadTooLarge);
+        }
+
+        var middleware = new ExcecoesMiddleware(Proximo, logger);
+
+        await middleware.InvokeAsync(contexto);
+
+        contexto.Response.StatusCode.Should().Be(413);
+        contexto.Response.ContentType.Should().Be("application/problem+json");
+
+        var problema = await LerProblemaAsync(contexto);
+        problema.Status.Should().Be(413);
+        logger.Niveis.Should().Contain(LogLevel.Warning);
+    }
+
+    [Fact]
     public async Task InvokeAsync_QuandoNaoHaExcecao_DeveSeguirOPipelineSemAlterarResposta()
     {
         var contexto = CriarContexto();

@@ -40,7 +40,10 @@ public sealed class IntegrarCreditos : IIntegrarCreditos
         {
             NumeroCredito = requisicao.NumeroCredito,
             NumeroNfse = requisicao.NumeroNfse,
-            DataConstituicao = requisicao.DataConstituicao,
+            // invariante: ModelState ([Required]) garante DataConstituicao != null aqui.
+            // Caller que invocar fora do pipeline HTTP precisa setar o valor antes.
+            // O '!' suprime o CS8629 (flow analysis nao consegue inferir o invariante a partir do atributo).
+            DataConstituicao = requisicao.DataConstituicao!.Value,
             ValorIssqn = requisicao.ValorIssqn,
             TipoCredito = requisicao.TipoCredito,
             // "Sim"/"Não" invalido lanca ArgumentException aqui -> middleware devolve 400
