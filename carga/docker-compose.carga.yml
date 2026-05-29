@@ -1,0 +1,35 @@
+# Rode cada cenario individualmente (nao 'up', que sobe os tres juntos):
+#   docker compose -f carga/docker-compose.carga.yml run --rm k6-pico
+#   (drenar a fila - ver README)
+#   docker compose -f carga/docker-compose.carga.yml run --rm k6-leitura
+#   docker compose -f carga/docker-compose.carga.yml run --rm k6-stress
+services:
+  k6-pico:
+    image: grafana/k6:latest
+    command: run /scripts/cenario-1-pico.js
+    environment:
+      BASE_URL: "http://api:8080"
+    volumes:
+      - ./:/scripts
+
+  k6-leitura:
+    image: grafana/k6:latest
+    command: run /scripts/cenario-2-leitura.js
+    environment:
+      BASE_URL: "http://api:8080"
+    volumes:
+      - ./:/scripts
+
+  k6-stress:
+    image: grafana/k6:latest
+    command: run /scripts/cenario-3-stress.js
+    environment:
+      BASE_URL: "http://api:8080"
+    volumes:
+      - ./:/scripts
+
+# rede externa criada pelo compose principal (confirme o nome com 'docker network ls')
+networks:
+  default:
+    external: true
+    name: creditofiscal_default
