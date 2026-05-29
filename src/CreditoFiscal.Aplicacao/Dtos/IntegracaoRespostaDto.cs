@@ -1,4 +1,4 @@
-namespace CreditoFiscal.Api.Dtos;
+namespace CreditoFiscal.Aplicacao.Dtos;
 
 public sealed record IntegracaoRespostaDto
 {

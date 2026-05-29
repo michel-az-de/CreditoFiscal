@@ -1,8 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using CreditoFiscal.Api.Mensagens;
 using CreditoFiscal.Api.Observabilidade;
+using CreditoFiscal.Aplicacao.Mensagens;
 using CreditoFiscal.Dominio.Abstracoes;
 using CreditoFiscal.Dominio.Entidades;
 using Microsoft.EntityFrameworkCore;

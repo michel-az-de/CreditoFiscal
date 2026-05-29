@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\src\CreditoFiscal.Dominio\CreditoFiscal.Dominio.csproj" />
     <ProjectReference Include="..\..\src\CreditoFiscal.Infraestrutura\CreditoFiscal.Infraestrutura.csproj" />
     <ProjectReference Include="..\..\src\CreditoFiscal.Api\CreditoFiscal.Api.csproj" />
+    <ProjectReference Include="..\..\src\CreditoFiscal.Aplicacao\CreditoFiscal.Aplicacao.csproj" />
   </ItemGroup>
 
 </Project>

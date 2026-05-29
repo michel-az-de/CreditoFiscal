@@ -1,6 +1,6 @@
 using System;
 
-namespace CreditoFiscal.Api.Dtos;
+namespace CreditoFiscal.Aplicacao.Dtos;
 
 // resposta dos GETs: espelha o credito, mas com SimplesNacional em "Sim"/"Não" pro cliente
 public sealed record CreditoRespostaDto

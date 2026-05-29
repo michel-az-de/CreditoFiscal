@@ -23,15 +23,16 @@ POST /api/creditos/integrar-credito-constituido
 
 ## Arquitetura
 
-Três camadas, dependência sempre apontando para o domínio (`Api → Infraestrutura → Domínio`):
+Quatro projetos, dependência sempre apontando para o domínio (`Api → Aplicacao → Domínio` e `Api → Infraestrutura → Domínio`):
 
 | Projeto | Responsabilidade |
 |---------|------------------|
 | `CreditoFiscal.Dominio` | Entidade `Credito`, enum `SimplesNacional`, abstrações (`ICreditoRepository`, `IUnidadeDeTrabalho`, `IMensagemPublisher`, `IMensagemConsumer`, `IConsumerSession<T>`, `ReceivedMessage<T>`), exceções. Sem dependência de framework. |
-| `CreditoFiscal.Infraestrutura` | EF Core + Npgsql (`CreditoFiscalDbContext`, `CreditoRepository`, `UnidadeDeTrabalho`), RabbitMQ (`AdaptadorRabbitMq`, `RabbitMqConsumerSession`), conversor de data, extensões de DI. |
-| `CreditoFiscal.Api` | Controllers, DTOs, middleware de erro, `CreditoConsumer`, health checks, composição (`Program.cs`). |
+| `CreditoFiscal.Aplicacao` | Casos de uso (`IIntegrarCreditos`, `IConsultarCreditosPorNfse`, `IConsultarCreditoPorNumero`), DTOs de entrada/saída, conversor de `SimplesNacional` e contratos de mensagem. Depende só do domínio — é a camada reutilizável (DLL própria). |
+| `CreditoFiscal.Infraestrutura` | EF Core + Npgsql (`CreditoFiscalDbContext`, `CreditoRepository`, `UnidadeDeTrabalho`), mensageria (adapters RabbitMQ / Kafka / ServiceBus + sessões de consumo), conversor de data, extensões de DI. |
+| `CreditoFiscal.Api` | Controllers (finos), middlewares (erro + correlation id), `CreditoConsumer`, health checks, OpenTelemetry, Swagger, composição (`Program.cs`). |
 
-Padrões usados: **Repository** + **Unit of Work**, **Factory** (extension `AdicionarMensageria` escolhe o provedor), **Anti-corruption layer** (`ConversorSimplesNacional`), **Session** descartável para consumo (`IConsumerSession<T>`), **Middleware**, **BackgroundService**.
+Padrões usados: **Repository** + **Unit of Work**, **Casos de uso** (camada de aplicação reutilizável), **Factory** (extension `AdicionarMensageria` escolhe o provedor), **Adapter** (RabbitMQ / Kafka / ServiceBus), **Anti-corruption layer** (`ConversorSimplesNacional`), **Session** descartável para consumo (`IConsumerSession<T>`), **Middleware**, **BackgroundService**.
 
 ## Como rodar
 
@@ -100,6 +101,7 @@ Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Si
 - **Segregação de interface (ISP)** — em vez de um `IBarramentoDeMensagens` único, há `IMensagemPublisher` e `IMensagemConsumer` separados (o controller só publica, o consumer só consome). Cada adapter implementa as duas, e o DI registra **a mesma instância singleton** para ambas.
 - **Múltiplos provedores via Factory (OCP)** — `AdicionarMensageria` escolhe o adapter por config (`Mensageria:Provedor`): **RabbitMQ** (padrão), **Kafka** (`AdaptadorKafka`) ou **ServiceBus** (`AdaptadorServiceBus`). Trocar de broker é mudar uma string — sem tocar em controller nem consumer. *Caveat honesto:* o modelo de streaming/offset do Kafka não tem ack/requeue por mensagem como AMQP/ServiceBus; no `AdaptadorKafka`, `Confirmar` faz commit de offset e `Rejeitar` faz `seek` de volta (re-leitura), documentado no código.
 - **Unit of Work** — o consumer depende só de abstrações do domínio (`ICreditoRepository` + `IUnidadeDeTrabalho`), sem tocar o `DbContext` concreto. Mantém o consumer testável e nas camadas certas.
+- **Camada de aplicação (projeto próprio)** — os casos de uso vivem em `CreditoFiscal.Aplicacao`, uma DLL que depende só do domínio. Os controllers apenas traduzem HTTP e delegam; nenhum controller fala direto com repositório ou publisher. Camada reutilizável fora da API.
 - **Middleware de erro** — borda única: `ArgumentException` → **400** (`Warning`), demais → **500** (`Error` com log completo no servidor, mas o corpo nunca expõe stack trace nem detalhe interno).
 
 ## Idempotência e garantia de entrega
