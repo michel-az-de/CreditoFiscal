@@ -32,27 +32,29 @@ namespace CreditoFiscal.Infraestrutura.Persistencia.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<decimal>("Aliquota")
-                        .HasPrecision(5, 4)
-                        .HasColumnType("numeric(5,4)")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
                         .HasColumnName("aliquota");
 
                     b.Property<decimal>("BaseCalculo")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
+                        .HasPrecision(15, 2)
+                        .HasColumnType("numeric(15,2)")
                         .HasColumnName("base_calculo");
 
                     b.Property<DateTime>("DataConstituicao")
-                        .HasColumnType("timestamp without time zone")
+                        .HasColumnType("date")
                         .HasColumnName("data_constituicao");
 
                     b.Property<string>("NumeroCredito")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("numero_credito");
 
                     b.Property<string>("NumeroNfse")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("numero_nfse");
 
                     b.Property<bool>("SimplesNacional")
@@ -61,22 +63,23 @@ namespace CreditoFiscal.Infraestrutura.Persistencia.Migrations
 
                     b.Property<string>("TipoCredito")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("tipo_credito");
 
                     b.Property<decimal>("ValorDeducao")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
+                        .HasPrecision(15, 2)
+                        .HasColumnType("numeric(15,2)")
                         .HasColumnName("valor_deducao");
 
                     b.Property<decimal>("ValorFaturado")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
+                        .HasPrecision(15, 2)
+                        .HasColumnType("numeric(15,2)")
                         .HasColumnName("valor_faturado");
 
                     b.Property<decimal>("ValorIssqn")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
+                        .HasPrecision(15, 2)
+                        .HasColumnType("numeric(15,2)")
                         .HasColumnName("valor_issqn");
 
                     b.HasKey("Id");

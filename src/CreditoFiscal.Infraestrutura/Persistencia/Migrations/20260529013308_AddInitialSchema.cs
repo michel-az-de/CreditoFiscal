@@ -16,16 +16,16 @@ namespace CreditoFiscal.Infraestrutura.Persistencia.Migrations
                 {
                     id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    numero_credito = table.Column<string>(type: "text", nullable: false),
-                    numero_nfse = table.Column<string>(type: "text", nullable: false),
-                    data_constituicao = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    valor_issqn = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
-                    tipo_credito = table.Column<string>(type: "text", nullable: false),
+                    numero_credito = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    numero_nfse = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    data_constituicao = table.Column<DateTime>(type: "date", nullable: false),
+                    valor_issqn = table.Column<decimal>(type: "numeric(15,2)", precision: 15, scale: 2, nullable: false),
+                    tipo_credito = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     simples_nacional = table.Column<bool>(type: "boolean", nullable: false),
-                    aliquota = table.Column<decimal>(type: "numeric(5,4)", precision: 5, scale: 4, nullable: false),
-                    valor_faturado = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
-                    valor_deducao = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
-                    base_calculo = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false)
+                    aliquota = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
+                    valor_faturado = table.Column<decimal>(type: "numeric(15,2)", precision: 15, scale: 2, nullable: false),
+                    valor_deducao = table.Column<decimal>(type: "numeric(15,2)", precision: 15, scale: 2, nullable: false),
+                    base_calculo = table.Column<decimal>(type: "numeric(15,2)", precision: 15, scale: 2, nullable: false)
                 },
                 constraints: table =>
                 {
