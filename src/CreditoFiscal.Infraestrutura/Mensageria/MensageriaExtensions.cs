@@ -89,10 +89,10 @@ public static class MensageriaExtensions
 
         var fabrica = new ConnectionFactory
         {
-            HostName = configuration["Mensageria:Host"] ?? "localhost",
-            Port = int.Parse(configuration["Mensageria:Port"] ?? "5672", CultureInfo.InvariantCulture),
-            UserName = configuration["Mensageria:Usuario"] ?? "guest",
-            Password = configuration["Mensageria:Senha"] ?? "guest",
+            HostName = configuration["Mensageria:RabbitMQ:Host"] ?? "localhost",
+            Port = int.Parse(configuration["Mensageria:RabbitMQ:Port"] ?? "5672", CultureInfo.InvariantCulture),
+            UserName = configuration["Mensageria:RabbitMQ:Usuario"] ?? "guest",
+            Password = configuration["Mensageria:RabbitMQ:Senha"] ?? "guest",
             AutomaticRecoveryEnabled = true
         };
 
