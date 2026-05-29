@@ -129,26 +129,40 @@ Se cair entre persistir e confirmar, a reentrega cai no filtro 1 (ou no índice 
 
 ## Testes
 
+**Unitários** (`tests/CreditoFiscal.Testes`) — 53 testes (xUnit + FluentAssertions + NSubstitute +
+EF Core InMemory), escritos em TDD (vermelho → verde) nas fases de lógica: domínio, repositório,
+conversor, middleware, controllers, casos de uso e o `CreditoConsumer` (incluindo `DbUpdateException`).
+
 ```bash
-dotnet test
+dotnet test tests/CreditoFiscal.Testes/CreditoFiscal.Testes.csproj
 ```
 
-43 testes (xUnit + FluentAssertions + NSubstitute + EF Core InMemory), escritos em TDD
-(vermelho → verde) nas fases de lógica: domínio, repositório, conversor, middleware,
-controllers e o `CreditoConsumer` (incluindo o caso de `DbUpdateException`).
+**Integração** (`tests/CreditoFiscal.TestesIntegracao`) — sobem Postgres e RabbitMQ reais via
+**Testcontainers** e a API em processo (`WebApplicationFactory`), exercitando o fluxo completo
+POST → fila → consumer → banco → GET, idempotência, entrada inválida (400) e readiness. Precisa de Docker.
+
+```bash
+dotnet test tests/CreditoFiscal.TestesIntegracao/CreditoFiscal.TestesIntegracao.csproj
+```
 
 ## CI
 
-`.github/workflows/ci.yml` roda `restore` + `build -c Release` + `test` em todo `push` e
-`pull_request` para `main` e `develop`, usando o SDK do `global.json`.
+`.github/workflows/ci.yml` roda em todo `push`/`pull_request` para `main` e `develop`, com o SDK do
+`global.json`, em dois jobs:
 
-## Validação manual (com Docker)
+- **build-e-teste** — `restore` + `build -c Release` + testes unitários (não precisa de Docker).
+- **integracao** — testes de integração com Testcontainers (o runner `ubuntu-latest` já tem Docker).
 
-1. `docker compose up --build` e confira `Now listening on...` no log da API.
-2. `GET /self` e `GET /ready` → 200.
-3. `POST` da Postman Collection (`docs/postman/`) → 202; consulte por NFS-e e por número.
-4. **POST duplicado** do mesmo `numeroCredito` → no log do consumer aparece o `Warning` "duplicata ignorada".
-5. **Teste de carga** (`carga/`): rode o cenário 1, **aguarde a fila drenar** (`docker exec credito-fiscal-rabbitmq rabbitmqctl list_queues name messages`), depois os cenários 2 e 3. Detalhes em `docs/carga/resultados.md`.
+## Validação executada (stack real)
+
+A stack foi subida de verdade (`docker compose up --build`, em WSL2 + Docker 29) e o fluxo
+ponta-a-ponta foi exercitado:
+
+1. `/self` e `/ready` → **200** (Postgres e RabbitMQ alcançáveis).
+2. `POST` de um lote → **202**; o consumer persistiu; `GET` por NFS-e e por número → **200** com os dados.
+3. **Reenvio do mesmo lote** → continua 1 linha por crédito; o log do consumer mostra `... ja existe; duplicata ignorada`.
+4. `POST` com `simplesNacional` inválido → **400** (ProblemDetails).
+5. **k6** nos três cenários, com métricas reais em `docs/carga/resultados.md` (pico 214 req/s, leitura 1.361 req/s, ambos 0% de falha).
 
 ## Convenções
 
@@ -157,6 +171,6 @@ controllers e o `CreditoConsumer` (incluindo o caso de `DbUpdateException`).
 
 ## Limitações conhecidas
 
-- O ambiente de scaffold **não tinha Docker**, então a stack não foi subida aqui e o **k6 não foi executado** (`docs/carga/resultados.md` está como `NAO EXECUTADO`, sem métricas inventadas). Build e testes são validados pelo CI a cada push.
+- Apenas o provedor **RabbitMQ** foi validado ponta-a-ponta com a stack real. **Kafka** e **ServiceBus** têm os adapters e a seleção por config testados, mas o round-trip real depende de subir o broker correspondente (`--profile kafka` / `--profile servicebus`). O health check `/ready` está cabeado para o RabbitMQ; trocar o provedor pede ajustar o check.
 - Propagação de `CancellationToken` dentro de uma chamada AMQP única não é possível no driver síncrono 6.x (checado entre chamadas).
-- Os adapters **Kafka** e **ServiceBus** têm teste de seleção da factory, mas o round-trip real (produzir/consumir) é validação manual — sem brokers na sessão, igual ao RabbitMQ. O health check `/ready` está cabeado para o RabbitMQ padrão; trocar o provedor pede ajustar o check.
+- Sob stress extremo (500 VUs no k6) o POST não falha, mas a latência cresce muito: o consumer drena ~20 msg/s, então a fila vira o gargalo de vazão (ver `docs/carga/resultados.md`).
