@@ -16,7 +16,8 @@ public sealed record IntegrarCreditoRequisicaoDto
     [StringLength(50, MinimumLength = 1)]
     public string NumeroNfse { get; init; } = string.Empty;
 
-    public DateTime DataConstituicao { get; init; }
+    [Required]
+    public DateTime? DataConstituicao { get; init; }
 
     [Range(typeof(decimal), "0", "9999999999999.99")]
     public decimal ValorIssqn { get; init; }
