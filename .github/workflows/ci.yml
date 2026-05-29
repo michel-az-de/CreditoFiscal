@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-e-teste:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configura .NET (versao do global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restaura dependencias
+        run: dotnet restore
+
+      - name: Compila em Release
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Roda os testes
+        run: dotnet test --configuration Release --no-build --verbosity normal
