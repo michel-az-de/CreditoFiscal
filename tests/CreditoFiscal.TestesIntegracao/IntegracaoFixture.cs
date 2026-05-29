@@ -40,25 +40,21 @@ public sealed class IntegracaoFixture : IAsyncLifetime
         await _postgres.StartAsync();
         await _rabbitmq.StartAsync();
 
-        // le credenciais/porta reais do container (a porta e mapeada para uma aleatoria do host)
+        // usuario/senha sao gerados pelo container; leio do connection string que ele expoe
         var rabbit = new Uri(_rabbitmq.GetConnectionString());
         var usuarioSenha = rabbit.UserInfo.Split(':');
 
-        // loopback IPv4 explicito: evita resolver "localhost" (IPv6/getaddrinfo) que falha em alguns hosts
-        var postgres = _postgres.GetConnectionString().Replace("localhost", "127.0.0.1");
-        var rabbitHost = rabbit.Host;
-        if (rabbitHost == "localhost")
-        {
-            rabbitHost = "127.0.0.1";
-        }
+        // conecta sempre por 127.0.0.1 + porta publicada: nao depende de resolver nome (getaddrinfo)
+        var portaPostgres = _postgres.GetMappedPublicPort(5432);
+        var portaRabbit = _rabbitmq.GetMappedPublicPort(5672);
 
         var ajustes = new Dictionary<string, string?>
         {
-            ["ConnectionStrings:Postgres"] = postgres,
+            ["ConnectionStrings:Postgres"] = $"Host=127.0.0.1;Port={portaPostgres};Database=creditofiscal;Username=postgres;Password=postgres",
             ["Mensageria:Provedor"] = "RabbitMQ",
             ["Mensageria:Fila"] = "integrar-credito-constituido-entry",
-            ["Mensageria:RabbitMQ:Host"] = rabbitHost,
-            ["Mensageria:RabbitMQ:Port"] = rabbit.Port.ToString(CultureInfo.InvariantCulture),
+            ["Mensageria:RabbitMQ:Host"] = "127.0.0.1",
+            ["Mensageria:RabbitMQ:Port"] = portaRabbit.ToString(CultureInfo.InvariantCulture),
             ["Mensageria:RabbitMQ:Usuario"] = usuarioSenha[0],
             ["Mensageria:RabbitMQ:Senha"] = usuarioSenha.Length > 1 ? usuarioSenha[1] : string.Empty
         };
