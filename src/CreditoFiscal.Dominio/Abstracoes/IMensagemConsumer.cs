@@ -6,5 +6,5 @@ namespace CreditoFiscal.Dominio.Abstracoes;
 
 public interface IMensagemConsumer
 {
-    Task<ISessaoDeConsumo<T>> AbrirSessaoAsync<T>(string fila, int maximo, TimeSpan timeout, CancellationToken ct);
+    Task<IConsumerSession<T>> AbrirSessaoAsync<T>(string fila, int maximo, TimeSpan timeout, CancellationToken ct);
 }
