@@ -97,10 +97,10 @@ Recebe um **array** de créditos e publica cada um na fila. `simplesNacional` ch
 - **400** `ProblemDetails` se algum `simplesNacional` for diferente de `"Sim"`/`"Não"` — o lote inteiro é rejeitado e **nada** é publicado.
 
 ### GET `/api/creditos/{numeroNfse}`
-Lista os créditos da NFS-e. **200** com array, **404** se não houver nenhum.
+Lista os créditos da NFS-e. **200** com array, **404** se não houver nenhum. Cada GET publica um evento `ConsultaCreditoRealizadaDto` no tópico/fila `consulta-credito-realizada` (auditoria — ver decisão técnica abaixo).
 
 ### GET `/api/creditos/credito/{numeroCredito}`
-Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Sim"`/`"Não"`), **404** se não existir.
+Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Sim"`/`"Não"`), **404** se não existir. Também publica auditoria em `consulta-credito-realizada`.
 
 ### GET `/self` e `/ready`
 `/self` = liveness (200 enquanto o processo está de pé). `/ready` = readiness (200 quando Postgres **e** o broker configurado — Kafka, RabbitMQ ou ServiceBus — respondem). O check de mensageria é selecionado por `Mensageria:Provedor` em runtime.
@@ -119,6 +119,7 @@ Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Si
 - **Unit of Work** — o consumer depende só de abstrações do domínio (`ICreditoRepository` + `IUnidadeDeTrabalho`), sem tocar o `DbContext` concreto. Mantém o consumer testável e nas camadas certas.
 - **Camada de aplicação (projeto próprio)** — os casos de uso vivem em `CreditoFiscal.Aplicacao`, uma DLL que depende só do domínio. Os controllers apenas traduzem HTTP e delegam; nenhum controller fala direto com repositório ou publisher. Camada reutilizável fora da API.
 - **Middleware de erro** — borda única: `ArgumentException` → **400** (`Warning`), demais → **500** (`Error` com log completo no servidor, mas o corpo nunca expõe stack trace nem detalhe interno).
+- **Publisher de auditoria de consultas (desafio extra)** — cada GET (`PorNfse` ou `PorNumero`) publica um `ConsultaCreditoRealizadaDto` (tipo + chave + quantidade retornada + timestamp UTC) no tópico/fila `consulta-credito-realizada`. O `PublicadorAuditoria` engole exceções do broker e loga `Warning`: auditoria é efeito colateral e **nunca derruba a consulta** — se o Kafka estiver fora, o GET continua respondendo 200. Reutiliza o mesmo `IMensagemPublisher` da integração, então a auditoria sai pelo broker selecionado em `Mensageria:Provedor`.
 
 ## Idempotência e garantia de entrega
 
