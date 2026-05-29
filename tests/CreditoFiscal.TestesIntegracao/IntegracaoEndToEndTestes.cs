@@ -59,11 +59,30 @@ public sealed class IntegracaoEndToEndTestes : IClassFixture<IntegracaoFixture>
 
         // segundo envio do mesmo numero: a idempotencia deve ignorar a duplicata
         await _fixture.Cliente.PostAsJsonAsync(Endpoint, lote);
-        await Task.Delay(3000);
 
-        var creditos = await AguardarPorNfseAsync("INT-NFSE-3", 1);
-        creditos.Should().NotBeNull();
-        creditos!.Should().HaveCount(1);
+        // poll por ~5s garantindo que o count nunca vira 2: se a idempotencia falhar, pega na primeira tentativa
+        for (var tentativa = 0; tentativa < 10; tentativa++)
+        {
+            await Task.Delay(500);
+            var resposta = await _fixture.Cliente.GetAsync("/api/creditos/INT-NFSE-3");
+            if (resposta.StatusCode == HttpStatusCode.OK)
+            {
+                var lista = await resposta.Content.ReadFromJsonAsync<List<CreditoRespostaDto>>();
+                lista.Should().NotBeNull();
+                lista!.Should().HaveCount(1, $"idempotencia tem que manter 1 (tentativa {tentativa + 1})");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Get_por_numero_retorna_credito_com_simples_nacional_nao()
+    {
+        var lote = new[] { NovoCredito("INT-5001", "INT-NFSE-5", "Não") };
+        await _fixture.Cliente.PostAsJsonAsync(Endpoint, lote);
+
+        var credito = await AguardarPorNumeroAsync("INT-5001");
+        credito.Should().NotBeNull();
+        credito!.SimplesNacional.Should().Be("Não");
     }
 
     [Fact]

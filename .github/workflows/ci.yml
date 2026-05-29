@@ -18,6 +18,15 @@ jobs:
         with:
           global-json-file: global.json
 
+      # cacheia ~/.nuget/packages indexado pelos csproj para nao baixar tudo a cada run
+      - name: Cache de pacotes NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Restaura dependencias
         run: dotnet restore
 
@@ -37,6 +46,14 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+
+      - name: Cache de pacotes NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
 
       # o runner ubuntu-latest ja tem Docker: o Testcontainers sobe Postgres e RabbitMQ reais
       - name: Roda os testes de integracao
