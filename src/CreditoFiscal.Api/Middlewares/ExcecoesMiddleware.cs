@@ -33,6 +33,13 @@ public sealed class ExcecoesMiddleware
             _logger.LogWarning(excecao, "Requisicao invalida: {Mensagem}", excecao.Message);
             await EscreverProblemaAsync(contexto, StatusCodes.Status400BadRequest, "Requisicao invalida", excecao.Message);
         }
+        catch (BadHttpRequestException excecao)
+        {
+            // 413 do RequestSizeLimit e demais 4xx do leitor de body do pipeline MVC;
+            // o input formatter nao captura isso, entao chega aqui via catch dedicado.
+            _logger.LogWarning(excecao, "Requisicao HTTP rejeitada ({StatusCode}): {Mensagem}", excecao.StatusCode, excecao.Message);
+            await EscreverProblemaAsync(contexto, excecao.StatusCode, "Requisicao rejeitada", excecao.Message);
+        }
         catch (Exception excecao)
         {
             // loga tudo no servidor, mas nao devolve stack/detalhe interno pro cliente

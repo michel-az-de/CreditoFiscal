@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Threading.Tasks;
 using CreditoFiscal.Aplicacao.Dtos;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
 using Xunit;
 
 namespace CreditoFiscal.TestesIntegracao;
@@ -119,6 +120,65 @@ public sealed class IntegracaoEndToEndTestes : IClassFixture<IntegracaoFixture>
         var resposta = await _fixture.Cliente.PostAsJsonAsync(Endpoint, lote);
 
         resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task DataConstituicao_null_retorna_400_com_errors_no_campo()
+    {
+        // Anonimo com a propriedade explicita como null exercita o caminho do STJ
+        // devolvendo null no wrapper Nullable<DateTime>, sem chamar o converter de data.
+        var lote = new[]
+        {
+            new
+            {
+                numeroCredito = "INT-DT-NULL",
+                numeroNfse = "INT-NFSE-DT-1",
+                dataConstituicao = (string?)null,
+                valorIssqn = 1500.75m,
+                tipoCredito = "ISSQN",
+                simplesNacional = "Sim",
+                aliquota = 5.0m,
+                valorFaturado = 30000.0m,
+                valorDeducao = 5000.0m,
+                baseCalculo = 25000.0m
+            }
+        };
+
+        var resposta = await _fixture.Cliente.PostAsJsonAsync(Endpoint, lote);
+
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problema = await resposta.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+        problema.Should().NotBeNull();
+        // ModelState do [Required] usa o nome da propriedade do DTO (PascalCase)
+        problema!.Errors.Keys.Should().Contain(k => k.EndsWith("DataConstituicao", System.StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DataConstituicao_ausente_retorna_400_com_errors_no_campo()
+    {
+        // Campo omitido do JSON: STJ devolve null no Nullable<DateTime> e o [Required] dispara.
+        var lote = new[]
+        {
+            new
+            {
+                numeroCredito = "INT-DT-AUSENTE",
+                numeroNfse = "INT-NFSE-DT-2",
+                valorIssqn = 1500.75m,
+                tipoCredito = "ISSQN",
+                simplesNacional = "Sim",
+                aliquota = 5.0m,
+                valorFaturado = 30000.0m,
+                valorDeducao = 5000.0m,
+                baseCalculo = 25000.0m
+            }
+        };
+
+        var resposta = await _fixture.Cliente.PostAsJsonAsync(Endpoint, lote);
+
+        resposta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problema = await resposta.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+        problema.Should().NotBeNull();
+        problema!.Errors.Keys.Should().Contain(k => k.EndsWith("DataConstituicao", System.StringComparison.Ordinal));
     }
 
     [Fact]
