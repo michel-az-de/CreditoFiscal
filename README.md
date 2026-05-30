@@ -251,7 +251,7 @@ dotnet test tests/CreditoFiscal.TestesIntegracao/CreditoFiscal.TestesIntegracao.
 `.github/workflows/ci.yml` roda em todo `push`/`pull_request` para `main` e `develop`, com o SDK do
 `global.json`, em dois jobs:
 
-- **build-e-teste** roda `restore` + `build -c Release` + os testes unitários (não precisa de Docker).
+- **build-e-teste** roda `restore` + `build -c Release` + os testes unitários (não precisa de Docker). Coleta cobertura via `coverlet.collector` (`--collect:"XPlat Code Coverage"`), converte com `ReportGenerator` para HTML e publica o relatório como artefato `cobertura-html` na execução do workflow. O resumo (`Summary.txt`) é impresso no log do job para olhar rápido em PR.
 - **integracao** roda os testes de integração com Testcontainers (o runner `ubuntu-latest` já tem Docker).
 
 ## Validação executada (stack real)
