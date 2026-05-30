@@ -1,0 +1,23 @@
+{
+  "stryker-config": {
+    "project": "CreditoFiscal.Aplicacao.csproj",
+    "test-projects": [
+      "tests/CreditoFiscal.Testes/CreditoFiscal.Testes.csproj"
+    ],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    },
+    "reporters": [
+      "html",
+      "progress",
+      "cleartext"
+    ],
+    "mutate": [
+      "src/CreditoFiscal.Aplicacao/**/*.cs",
+      "!src/CreditoFiscal.Aplicacao/CasosDeUso/AplicacaoExtensions.cs"
+    ],
+    "verbosity": "info"
+  }
+}

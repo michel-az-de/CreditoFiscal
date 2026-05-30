@@ -99,6 +99,7 @@ Tudo é configurável por `appsettings.json` ou por variável de ambiente (o com
 | `ConnectionStrings:Postgres` | `ConnectionStrings__Postgres` | `Host=postgres;Port=5432;Database=creditofiscal;Username=postgres;Password=postgres` | conexão do EF Core/Npgsql |
 | `Mensageria:Provedor` | `Mensageria__Provedor` | `Kafka` | provedor ativo: `Kafka`, `RabbitMQ` ou `ServiceBus` |
 | `Mensageria:Fila` | `Mensageria__Fila` | `integrar-credito-constituido-entry` | tópico/fila de integração |
+| `Mensageria:MaxTentativasConsumer` | `Mensageria__MaxTentativasConsumer` | `5` | limite de tentativas antes do consumer encaminhar para DLQ |
 | `Mensageria:Kafka:BootstrapServers` | `Mensageria__Kafka__BootstrapServers` | `kafka:9092` | brokers do Kafka |
 | `Mensageria:Kafka:GrupoConsumidor` | `Mensageria__Kafka__GrupoConsumidor` | `credito-fiscal` | consumer group |
 | `Mensageria:RabbitMQ:Host` | `Mensageria__RabbitMQ__Host` | `rabbitmq` | host do RabbitMQ |
@@ -181,6 +182,8 @@ Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Si
 
 ## Decisões técnicas
 
+Decisões com peso de longo prazo vivem como ADRs (formato Michael Nygard) em [`docs/adr/`](docs/adr/): multi broker com factory, idempotência em camadas, auditoria best effort, sem outbox, sem FluentValidation e max retry e DLQ por broker. A lista expandida abaixo cobre o detalhe de engenharia que não vale ADR.
+
 <details>
 <summary>Decisões de engenharia (clique para expandir): SimplesNacional em três línguas, driver síncrono, thread-safety do publisher, sessão de consumo, idempotência, ISP, factory de provedores, auditoria de consultas e mais.</summary>
 
@@ -205,6 +208,8 @@ Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Si
   - **`ValidationProblemDetails`** para validação sintática: `[Required]`/`[Range]` no DTO e o count check do lote. Caminho automático do `[ApiController]` e o count check (manual) produzem `status: 400` no corpo, `errors` populado e mesmo content-type; o manual difere apenas em `type`/`traceId` (não passa pela `ProblemDetailsFactory`). Convenção estrutural do ASP.NET: chaves de propriedades do DTO saem em **PascalCase** (`DataConstituicao`); chaves adicionadas manualmente (parâmetro do action) saem em **camelCase** (`creditos`). String malformada de data (ex.: `"abc"`) também cai em `ValidationProblemDetails`, mas pode aparecer com chave `$` (root path) e mensagem genérica do framework, porque o `FormatException` do converter perde o path da propriedade.
   - **`ProblemDetails` plain** para falhas de domínio (`ArgumentException` → 400) e runtime capturadas no `ExcecoesMiddleware` (default → 500; `BadHttpRequestException` → status da exception, ex.: 413).
 - **Endurecimento parcial.** `dataConstituicao` é `[Required]` (`DateTime?` no DTO). Os decimais (`valorIssqn`, `aliquota`, `valorFaturado`, `valorDeducao`, `baseCalculo`) **continuam com `[Range(0, ...)]`**: rejeitam **negativos**, mas **aceitam zero**. Subir o piso semântico (ex.: `[Range(0.01, ...)]` onde fizer sentido fiscal) exige decisão de domínio (`ValorDeducao = 0` é caso comum válido) e fica como trabalho futuro.
+- **Max retry e DLQ por broker.** `ReceivedMessage<T>.Tentativas` é a contagem 1-based exposta no envelope. Cada adapter popula a partir do que o broker oferece: `DeliveryCount` no Service Bus, `x-delivery-count + 1` em fila quorum no RabbitMQ, `RegistroDeTentativasKafka` em memória no Kafka. O `CreditoConsumer` decide DLQ quando `Tentativas >= Mensageria:MaxTentativasConsumer` (default 5, configurável). O destino da DLQ é assimétrico: sub-queue nativa `<fila>/$DeadLetterQueue` no Service Bus, fila *classic durable* `<fila>-dlq` no RabbitMQ (declarada pelo `CriadorDeFilas`), topic `<fila>-dlq` no Kafka (auto-criado pelo broker em dev). Detalhes por broker e *trade-offs* na seção "Limitações conhecidas".
+- **Architecture tests (NetArchTest).** Cinco regras automatizadas em `RegrasDeArquiteturaTestes` garantem que as setas de dependência da clean architecture continuem apontando para o domínio (`Api → {Aplicacao, Infraestrutura} → Dominio`), que controllers fiquem finos (sem `DbContext`, `IConfiguration` ou tipos de Infraestrutura) e que casos de uso sejam `sealed`. Pegado em CI no `dotnet test`, falha sem precisar revisor humano.
 
 </details>
 
@@ -215,16 +220,19 @@ Entrega **at-least-once**: o `ack` (`ConfirmarAsync`) só acontece **depois** do
 1. `ExisteAsync(numeroCredito)` antes de persistir → se já existe, confirma sem reprocessar.
 2. **Índice único** em `numero_credito` no banco → numa corrida entre instâncias, o `SaveChanges` lança `DbUpdateException`, que também é tratada como duplicata (confirma).
 
-Se cair entre persistir e confirmar, a reentrega cai no filtro 1 (ou no índice único). Falha real (banco fora) → `RejeitarAsync(reencaminhar: true)`, a mensagem volta pra fila. Um `try/catch` externo no `ExecuteAsync` impede que qualquer defeito de iteração derrube o host (no .NET 6, exceção que escapa de `ExecuteAsync` mata o processo).
+Se cair entre persistir e confirmar, a reentrega cai no filtro 1 (ou no índice único). Falha real (banco fora) → `RejeitarAsync(reencaminhar: true)`, a mensagem volta pra fila e o broker incrementa o contador de tentativas; ao alcançar `Mensageria:MaxTentativasConsumer` (default 5), o consumer encaminha para DLQ em vez de reenfileirar (ver "Limitações conhecidas" para a semântica por broker). Um `try/catch` externo no `ExecuteAsync` impede que qualquer defeito de iteração derrube o host (no .NET 6, exceção que escapa de `ExecuteAsync` mata o processo).
 
 **Publish parcial do lote.** O POST publica uma mensagem por crédito, em sequência (sem bulk, como o enunciado pede). Se a publicação da mensagem `N` falhar (broker indisponível, timeout), as mensagens `1..N-1` já foram aceitas pelo broker e serão processadas. O cliente recebe **500** e o retry do lote inteiro é seguro: a idempotência por `numero_credito` cobre os já publicados sem duplicar. Trade-off consciente: at-least-once com retry idempotente, sem outbox.
 
 ## Testes
 
-**Unitários** (`tests/CreditoFiscal.Testes`), 59 testes (xUnit + FluentAssertions + NSubstitute +
-EF Core InMemory), escritos em TDD (vermelho → verde) nas fases de lógica: domínio, repositório,
-conversor, middleware, controllers, casos de uso, publicador de auditoria e o `CreditoConsumer`
-(incluindo `DbUpdateException`).
+**Unitários** (`tests/CreditoFiscal.Testes`), 78 testes (xUnit + FluentAssertions + NSubstitute +
+EF Core InMemory + NetArchTest), escritos em TDD (vermelho → verde) nas fases de lógica: domínio, repositório,
+conversor, middleware, controllers, casos de uso, publicador de auditoria, o `CreditoConsumer`
+(incluindo `DbUpdateException` e o gate de DLQ por `Tentativas`), os três adapters de mensageria
+(`Tentativas` populado em cada broker, `EnviarParaDlqAsync` em cada implementação), o
+`CriadorDeFilas` (declaração quorum + DLQ no RabbitMQ) e 5 regras de arquitetura (clean
+architecture, controllers finos, casos de uso `sealed`).
 
 ```bash
 dotnet test tests/CreditoFiscal.Testes/CreditoFiscal.Testes.csproj
@@ -238,13 +246,27 @@ POST → fila → consumer → banco → GET, idempotência, entrada inválida (
 dotnet test tests/CreditoFiscal.TestesIntegracao/CreditoFiscal.TestesIntegracao.csproj
 ```
 
+**Mutation testing** (`stryker-config.json` na raiz) mede qualidade da suite além da cobertura simples: o Stryker muta o código (inverte operadores, remove blocos, etc.) e verifica se algum teste falha. Score baixo aponta testes que executam código sem detectar defeitos. Config foca em `CreditoFiscal.Aplicacao` (onde a lógica de caso de uso vive); não roda no CI por padrão (custo de tempo). Para rodar local:
+
+```bash
+dotnet tool install -g dotnet-stryker
+dotnet stryker
+```
+
+O relatório HTML sai em `StrykerOutput/<data>/reports/mutation-report.html`.
+
 ## CI
 
 `.github/workflows/ci.yml` roda em todo `push`/`pull_request` para `main` e `develop`, com o SDK do
 `global.json`, em dois jobs:
 
-- **build-e-teste** roda `restore` + `build -c Release` + os testes unitários (não precisa de Docker).
+- **build-e-teste** roda `restore` + `build -c Release` + os testes unitários (não precisa de Docker). Coleta cobertura via `coverlet.collector` (`--collect:"XPlat Code Coverage"`), converte com `ReportGenerator` para HTML e publica o relatório como artefato `cobertura-html` na execução do workflow. O resumo (`Summary.txt`) é impresso no log do job para olhar rápido em PR.
 - **integracao** roda os testes de integração com Testcontainers (o runner `ubuntu-latest` já tem Docker).
+
+Complementam o pipeline:
+
+- `.github/workflows/codeql.yml`: análise CodeQL semanal (segunda 07:00 UTC) e em todo push/PR para `main` ou `develop`, focada em C#.
+- `.github/dependabot.yml`: atualizações automáticas semanais para NuGet, GitHub Actions e Docker. Cada ecossistema abre até 5 PRs simultâneos.
 
 ## Validação executada (stack real)
 
@@ -272,5 +294,8 @@ Rodado no perfil **RabbitMQ** (`MENSAGERIA_PROVEDOR=RabbitMQ docker compose --pr
 - O round-trip real de **ServiceBus** depende de subir o emulator (`--profile servicebus`). Os adapters têm cobertura de unit test (factory + thread-safety), mas o teste de integração com Testcontainers usa RabbitMQ por ser o broker mais leve para subir em CI.
 - Propagação de `CancellationToken` dentro de uma chamada AMQP única não é possível no driver síncrono RabbitMQ 6.x (checado entre chamadas).
 - Sob stress extremo (500 VUs no k6 com RabbitMQ), o POST não falha, mas a latência cresce muito: o consumer drena ~20 msg/s, então o broker vira o gargalo de vazão (ver `docs/carga/resultados.md`).
-- **Poison message no consumer.** O `catch (Exception)` do `CreditoConsumer` chama `RejeitarAsync(reencaminhar: true)` — bom para erro transitório, **mas** uma mensagem que sempre falha (defeito de domínio não previsto) entra em **loop em todos os brokers**, inclusive Service Bus. O `Rejeitar(reencaminhar=false)` do `AdaptadorServiceBus` está implementado e iria para a DLQ, mas o caminho atual nunca o aciona. Mitigação futura: contador de redelivery / DLQ explícita.
+- **Poison message no consumer.** Tratado: o `CreditoConsumer` encaminha para DLQ explícita quando `mensagem.Tentativas` alcança `Mensageria:MaxTentativasConsumer` (default 5). A semântica de "tentativas" é assimétrica por broker, e o README expõe isso por escolha consciente:
+  - **Service Bus.** `ServiceBusReceivedMessage.DeliveryCount`, *system property* que o broker incrementa a cada `AbandonMessageAsync` ou expiração de lock. A fila ainda tem `MaxDeliveryCount: 10` no `servicebus-emulator-config.json` como segunda barreira automática.
+  - **RabbitMQ.** Fila migrada para **quorum** com `x-delivery-limit: 10`, `x-dead-letter-exchange` e `x-dead-letter-routing-key` na declaração (ver `CriadorDeFilas`). O broker incrementa `x-delivery-count` em cada redelivery; a sessão lê esse header e popula `Tentativas` em base 1. A DLQ `integrar-credito-constituido-entry-dlq` é *classic durable*, declarada pelo mesmo `CriadorDeFilas` antes da principal.
+  - **Kafka.** Sem contador no protocolo: `AdaptadorKafka` mantém `RegistroDeTentativasKafka` em memória, indexado por `TopicPartitionOffset` com `lock`. Limitação aceita: em restart do processo ou rebalance do *consumer group*, o contador zera e o ciclo de tentativas recomeça; em poison loop o limite vira "5 tentativas por instância de consumer", não "5 absolutas". A DLQ é publicada no topic `integrar-credito-constituido-entry-dlq` (auto-criado pelo broker porque `KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"`; em produção real, declarar o topic seria boa prática).
 - **Auditoria síncrona.** O `PublicadorAuditoria` engole exceções mas espera o publish completar (ver Decisões técnicas). Para brokers lentos sem timeout configurado no cliente, o GET pode bloquear; trabalho futuro é envolver o publish em `CancellationTokenSource` com timeout curto ou disparar em `Task.Run` fora da thread da consulta.

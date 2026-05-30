@@ -13,13 +13,17 @@ namespace CreditoFiscal.Infraestrutura.Mensageria;
 internal sealed class RabbitMqConsumerSession<T> : IConsumerSession<T>
 {
     private readonly IModel _canal;
+    private readonly JsonSerializerOptions _opcoes;
+    private readonly string _nomeDaDlq;
     private readonly List<ReceivedMessage<T>> _mensagens = new List<ReceivedMessage<T>>();
     private readonly Dictionary<ReceivedMessage<T>, ulong> _tags = new Dictionary<ReceivedMessage<T>, ulong>();
 
     public RabbitMqConsumerSession(IModel canal, string fila, int maximo, TimeSpan timeout, JsonSerializerOptions opcoes)
     {
         _canal = canal;
-        Drenar(fila, maximo, timeout, opcoes);
+        _opcoes = opcoes;
+        _nomeDaDlq = fila + "-dlq";
+        Drenar(fila, maximo, timeout);
     }
 
     public IReadOnlyList<ReceivedMessage<T>> Mensagens
@@ -41,6 +45,29 @@ internal sealed class RabbitMqConsumerSession<T> : IConsumerSession<T>
         return Task.CompletedTask;
     }
 
+    public Task EnviarParaDlqAsync(ReceivedMessage<T> mensagem, string motivo, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var propriedades = _canal.CreateBasicProperties();
+        propriedades.Persistent = true;
+        propriedades.ContentType = "application/json";
+        propriedades.Headers = new Dictionary<string, object>
+        {
+            ["x-dlq-motivo"] = motivo
+        };
+
+        // publica na DLQ via default exchange + routing key. A DLQ existe (declarada pelo
+        // CriadorDeFilas), entao a mensagem nao se perde mesmo com mandatory:false.
+        var corpo = JsonSerializer.SerializeToUtf8Bytes(mensagem.Conteudo, _opcoes);
+        _canal.BasicPublish(exchange: string.Empty, routingKey: _nomeDaDlq, mandatory: false, basicProperties: propriedades, body: corpo);
+
+        // ack da original so depois do publish na DLQ: se o publish falhar, a mensagem
+        // continua disponivel pra reentrega ate o broker atingir x-delivery-limit.
+        _canal.BasicAck(_tags[mensagem], multiple: false);
+        return Task.CompletedTask;
+    }
+
     public ValueTask DisposeAsync()
     {
         // fechar o canal devolve pra fila tudo que ainda nao recebeu ack (redelivered=true)
@@ -48,7 +75,7 @@ internal sealed class RabbitMqConsumerSession<T> : IConsumerSession<T>
         return ValueTask.CompletedTask;
     }
 
-    private void Drenar(string fila, int maximo, TimeSpan timeout, JsonSerializerOptions opcoes)
+    private void Drenar(string fila, int maximo, TimeSpan timeout)
     {
         var cronometro = Stopwatch.StartNew();
         for (var i = 0; i < maximo; i++)
@@ -64,7 +91,7 @@ internal sealed class RabbitMqConsumerSession<T> : IConsumerSession<T>
                 break;   // fila vazia: sai no primeiro null, sem busy-spin
             }
 
-            var conteudo = JsonSerializer.Deserialize<T>(resultado.Body.Span, opcoes);
+            var conteudo = JsonSerializer.Deserialize<T>(resultado.Body.Span, _opcoes);
             if (conteudo == null)
             {
                 // corpo ilegivel: rejeita sem reenfileirar pra nao travar a fila num veneno
@@ -72,9 +99,34 @@ internal sealed class RabbitMqConsumerSession<T> : IConsumerSession<T>
                 continue;
             }
 
-            var envelope = new ReceivedMessage<T>(conteudo);
+            var envelope = new ReceivedMessage<T>(conteudo)
+            {
+                Tentativas = LerTentativasDeHeader(resultado.BasicProperties)
+            };
             _mensagens.Add(envelope);
             _tags[envelope] = resultado.DeliveryTag;
         }
+    }
+
+    private static int LerTentativasDeHeader(IBasicProperties propriedades)
+    {
+        // quorum queue adiciona x-delivery-count: 0 na primeira entrega, +1 a cada redelivery.
+        // Tentativas e 1-based ("esta e a Nesima entrega"), alinhado com Service Bus DeliveryCount.
+        if (propriedades?.Headers == null)
+        {
+            return 1;
+        }
+
+        if (!propriedades.Headers.TryGetValue("x-delivery-count", out var valor))
+        {
+            return 1;
+        }
+
+        return valor switch
+        {
+            long l => (int)l + 1,
+            int i => i + 1,
+            _ => 1
+        };
     }
 }

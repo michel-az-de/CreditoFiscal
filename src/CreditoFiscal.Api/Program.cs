@@ -71,8 +71,6 @@ using (var escopo = app.Services.CreateScope())
 
 // correlation id primeiro: o escopo de log vale pra tudo abaixo, inclusive o middleware de erro
 app.UseMiddleware<CorrelacaoMiddleware>();
-
-// captura excecao de tudo que vem abaixo
 app.UseMiddleware<ExcecoesMiddleware>();
 
 app.UseSwagger();

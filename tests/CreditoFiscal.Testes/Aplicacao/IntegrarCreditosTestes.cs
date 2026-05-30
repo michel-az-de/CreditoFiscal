@@ -6,6 +6,7 @@ using CreditoFiscal.Aplicacao.CasosDeUso;
 using CreditoFiscal.Aplicacao.Dtos;
 using CreditoFiscal.Aplicacao.Mensagens;
 using CreditoFiscal.Dominio.Abstracoes;
+using CreditoFiscal.Testes.Suporte;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -21,8 +22,8 @@ public sealed class IntegrarCreditosTestes
         var casoDeUso = new IntegrarCreditos(publisher);
         var creditos = new List<IntegrarCreditoRequisicaoDto>
         {
-            MontarRequisicao("1", "Sim"),
-            MontarRequisicao("2", "Não")
+            CreditoMother.Requisicao("1", "Sim"),
+            CreditoMother.Requisicao("2", "Não")
         };
 
         await casoDeUso.ExecutarAsync(creditos, CancellationToken.None);
@@ -38,7 +39,7 @@ public sealed class IntegrarCreditosTestes
     {
         var publisher = Substitute.For<IMensagemPublisher>();
         var casoDeUso = new IntegrarCreditos(publisher);
-        var creditos = new List<IntegrarCreditoRequisicaoDto> { MontarRequisicao("1", "Talvez") };
+        var creditos = new List<IntegrarCreditoRequisicaoDto> { CreditoMother.Requisicao("1", "Talvez") };
 
         Func<Task> acao = AcaoDe(casoDeUso, creditos);
 
@@ -52,8 +53,8 @@ public sealed class IntegrarCreditosTestes
         var casoDeUso = new IntegrarCreditos(publisher);
         var creditos = new List<IntegrarCreditoRequisicaoDto>
         {
-            MontarRequisicao("1", "Sim"),
-            MontarRequisicao("2", "Talvez")
+            CreditoMother.Requisicao("1", "Sim"),
+            CreditoMother.Requisicao("2", "Talvez")
         };
 
         Func<Task> acao = AcaoDe(casoDeUso, creditos);
@@ -70,20 +71,4 @@ public sealed class IntegrarCreditosTestes
         };
     }
 
-    private static IntegrarCreditoRequisicaoDto MontarRequisicao(string numeroCredito, string simplesNacional)
-    {
-        return new IntegrarCreditoRequisicaoDto
-        {
-            NumeroCredito = numeroCredito,
-            NumeroNfse = "nfse-1",
-            DataConstituicao = new DateTime(2024, 2, 25),
-            ValorIssqn = 1500.75m,
-            TipoCredito = "ISSQN",
-            SimplesNacional = simplesNacional,
-            Aliquota = 5.0m,
-            ValorFaturado = 30000m,
-            ValorDeducao = 5000m,
-            BaseCalculo = 25000m
-        };
-    }
 }
