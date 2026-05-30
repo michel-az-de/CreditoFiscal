@@ -246,6 +246,15 @@ POST → fila → consumer → banco → GET, idempotência, entrada inválida (
 dotnet test tests/CreditoFiscal.TestesIntegracao/CreditoFiscal.TestesIntegracao.csproj
 ```
 
+**Mutation testing** (`stryker-config.json` na raiz) mede qualidade da suite além da cobertura simples: o Stryker muta o código (inverte operadores, remove blocos, etc.) e verifica se algum teste falha. Score baixo aponta testes que executam código sem detectar defeitos. Config foca em `CreditoFiscal.Aplicacao` (onde a lógica de caso de uso vive); não roda no CI por padrão (custo de tempo). Para rodar local:
+
+```bash
+dotnet tool install -g dotnet-stryker
+dotnet stryker
+```
+
+O relatório HTML sai em `StrykerOutput/<data>/reports/mutation-report.html`.
+
 ## CI
 
 `.github/workflows/ci.yml` roda em todo `push`/`pull_request` para `main` e `develop`, com o SDK do
