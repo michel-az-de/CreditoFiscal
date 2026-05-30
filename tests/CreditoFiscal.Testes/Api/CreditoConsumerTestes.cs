@@ -1,11 +1,15 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using CreditoFiscal.Api.BackgroundServices;
 using CreditoFiscal.Aplicacao.Mensagens;
 using CreditoFiscal.Dominio.Abstracoes;
 using CreditoFiscal.Dominio.Entidades;
+using CreditoFiscal.Testes.Suporte;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -24,7 +28,7 @@ public sealed class CreditoConsumerTestes
         var unidade = Substitute.For<IUnidadeDeTrabalho>();
         var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
         var consumer = MontarConsumer();
-        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(MontarDto("123"));
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 1 };
 
         await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
 
@@ -41,7 +45,7 @@ public sealed class CreditoConsumerTestes
         var unidade = Substitute.For<IUnidadeDeTrabalho>();
         var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
         var consumer = MontarConsumer();
-        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(MontarDto("123"));
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 1 };
 
         await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
 
@@ -59,7 +63,7 @@ public sealed class CreditoConsumerTestes
         unidade.SalvarAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new DbUpdateException("conflito de unique"));
         var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
         var consumer = MontarConsumer();
-        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(MontarDto("123"));
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 1 };
 
         await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
 
@@ -68,43 +72,54 @@ public sealed class CreditoConsumerTestes
     }
 
     [Fact]
-    public async Task ProcessarAsync_QuandoExcecaoGenerica_DeveRejeitarComReencaminhar()
+    public async Task ProcessarAsync_QuandoExcecaoGenericaEAindaTemOrcamento_DeveRejeitarComReencaminhar()
     {
         var repositorio = Substitute.For<ICreditoRepository>();
         repositorio.ExisteAsync("123", Arg.Any<CancellationToken>()).Returns(false);
         repositorio.AdicionarAsync(Arg.Any<Credito>(), Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("falha"));
         var unidade = Substitute.For<IUnidadeDeTrabalho>();
         var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
-        var consumer = MontarConsumer();
-        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(MontarDto("123"));
+        var consumer = MontarConsumer(maxTentativas: 5);
+        // Tentativas = 3 esta dentro do orcamento (< 5): ainda reenfileira
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 3 };
 
         await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
 
         await sessao.Received(1).RejeitarAsync(mensagem, true, Arg.Any<CancellationToken>());
+        await sessao.DidNotReceive().EnviarParaDlqAsync(Arg.Any<ReceivedMessage<CreditoConstituidoDto>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await sessao.DidNotReceive().ConfirmarAsync(Arg.Any<ReceivedMessage<CreditoConstituidoDto>>(), Arg.Any<CancellationToken>());
     }
 
-    private static CreditoConsumer MontarConsumer()
+    [Fact]
+    public async Task ProcessarAsync_QuandoExcecaoGenericaEExcedeuMaxTentativas_DeveEnviarParaDlq()
+    {
+        var repositorio = Substitute.For<ICreditoRepository>();
+        repositorio.ExisteAsync("123", Arg.Any<CancellationToken>()).Returns(false);
+        repositorio.AdicionarAsync(Arg.Any<Credito>(), Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("falha persistente"));
+        var unidade = Substitute.For<IUnidadeDeTrabalho>();
+        var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
+        var consumer = MontarConsumer(maxTentativas: 5);
+        // Tentativas = 5 == max: a entrega Nesima falhou e o consumer encaminha pra DLQ
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 5 };
+
+        await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
+
+        await sessao.Received(1).EnviarParaDlqAsync(mensagem, Arg.Is<string>(motivo => motivo.Contains("5 tentativas")), Arg.Any<CancellationToken>());
+        await sessao.DidNotReceive().RejeitarAsync(Arg.Any<ReceivedMessage<CreditoConstituidoDto>>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await sessao.DidNotReceive().ConfirmarAsync(Arg.Any<ReceivedMessage<CreditoConstituidoDto>>(), Arg.Any<CancellationToken>());
+    }
+
+    private static CreditoConsumer MontarConsumer(int maxTentativas = 5)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var consumer = Substitute.For<IMensagemConsumer>();
-        return new CreditoConsumer(scopeFactory, consumer, NullLogger<CreditoConsumer>.Instance);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Mensageria:MaxTentativasConsumer"] = maxTentativas.ToString(CultureInfo.InvariantCulture)
+            })
+            .Build();
+        return new CreditoConsumer(scopeFactory, consumer, configuration, NullLogger<CreditoConsumer>.Instance);
     }
 
-    private static CreditoConstituidoDto MontarDto(string numeroCredito)
-    {
-        return new CreditoConstituidoDto
-        {
-            NumeroCredito = numeroCredito,
-            NumeroNfse = "nfse-1",
-            DataConstituicao = new DateTime(2024, 2, 25),
-            ValorIssqn = 1500.75m,
-            TipoCredito = "ISSQN",
-            SimplesNacional = SimplesNacional.NaoOptante,
-            Aliquota = 5.0m,
-            ValorFaturado = 30000m,
-            ValorDeducao = 5000m,
-            BaseCalculo = 25000m
-        };
-    }
 }

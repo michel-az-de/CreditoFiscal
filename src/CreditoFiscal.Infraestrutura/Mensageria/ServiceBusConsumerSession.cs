@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
@@ -25,7 +26,9 @@ internal sealed class ServiceBusConsumerSession<T> : IConsumerSession<T>
                 continue;   // corpo ilegivel: deixa o lock expirar e o ServiceBus reentrega
             }
 
-            var envelope = new ReceivedMessage<T>(conteudo);
+            // DeliveryCount e system property do Service Bus: o broker incrementa em cada
+            // AbandonMessageAsync (e em expiracao de lock). Na primeira entrega vale 1.
+            var envelope = new ReceivedMessage<T>(conteudo) { Tentativas = recebida.DeliveryCount };
             _mensagens.Add(envelope);
             _originais[envelope] = recebida;
         }
@@ -50,6 +53,13 @@ internal sealed class ServiceBusConsumerSession<T> : IConsumerSession<T>
 
         // sem reencaminhar: manda pra dead-letter em vez de descartar silenciosamente
         return _receptor.DeadLetterMessageAsync(_originais[mensagem], cancellationToken: ct);
+    }
+
+    public Task EnviarParaDlqAsync(ReceivedMessage<T> mensagem, string motivo, CancellationToken ct)
+    {
+        // dead-letter explicito com motivo. A fila tambem tem MaxDeliveryCount como rede de
+        // seguranca: mesmo sem essa chamada, o broker dead-letteriza ao exceder o limite.
+        return _receptor.DeadLetterMessageAsync(_originais[mensagem], deadLetterReason: motivo, deadLetterErrorDescription: null, cancellationToken: ct);
     }
 
     public async ValueTask DisposeAsync()

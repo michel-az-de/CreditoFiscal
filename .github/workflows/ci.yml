@@ -33,8 +33,26 @@ jobs:
       - name: Compila em Release
         run: dotnet build --configuration Release --no-restore
 
-      - name: Roda os testes unitarios
-        run: dotnet test tests/CreditoFiscal.Testes/CreditoFiscal.Testes.csproj --configuration Release --no-build --verbosity normal
+      # XPlat Code Coverage e o coletor do Coverlet (Coverlet.Collector ja esta no csproj).
+      # Gera coverage.cobertura.xml em TestResults/<guid>/
+      - name: Roda os testes unitarios com cobertura
+        run: dotnet test tests/CreditoFiscal.Testes/CreditoFiscal.Testes.csproj --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+      - name: Instala ReportGenerator
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool
+
+      - name: Converte cobertura para HTML
+        run: reportgenerator -reports:'./TestResults/**/coverage.cobertura.xml' -targetdir:'./TestResults/CoverageReport' -reporttypes:'HtmlInline;TextSummary'
+
+      - name: Imprime o resumo de cobertura no log
+        run: cat ./TestResults/CoverageReport/Summary.txt
+
+      - name: Publica relatorio HTML como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-html
+          path: ./TestResults/CoverageReport
+          retention-days: 30
 
   integracao:
     runs-on: ubuntu-latest

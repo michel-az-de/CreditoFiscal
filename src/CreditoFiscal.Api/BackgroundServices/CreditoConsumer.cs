@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using CreditoFiscal.Api.Observabilidade;
@@ -6,6 +7,7 @@ using CreditoFiscal.Aplicacao.Mensagens;
 using CreditoFiscal.Dominio.Abstracoes;
 using CreditoFiscal.Dominio.Entidades;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -14,15 +16,19 @@ namespace CreditoFiscal.Api.BackgroundServices;
 
 public sealed class CreditoConsumer : BackgroundService
 {
+    private const int MaxTentativasPadrao = 5;
+
     private readonly IServiceScopeFactory _escopos;
     private readonly IMensagemConsumer _consumer;
     private readonly ILogger<CreditoConsumer> _logger;
+    private readonly int _maxTentativas;
 
-    public CreditoConsumer(IServiceScopeFactory escopos, IMensagemConsumer consumer, ILogger<CreditoConsumer> logger)
+    public CreditoConsumer(IServiceScopeFactory escopos, IMensagemConsumer consumer, IConfiguration configuration, ILogger<CreditoConsumer> logger)
     {
         _escopos = escopos;
         _consumer = consumer;
         _logger = logger;
+        _maxTentativas = LerMaxTentativas(configuration);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -91,10 +97,30 @@ public sealed class CreditoConsumer : BackgroundService
         }
         catch (Exception excecao)
         {
-            // falha real (banco fora, etc.): devolve pra fila pra tentar de novo
-            _logger.LogError(excecao, "Falha ao processar credito {Numero}; reenfileirando", dto.NumeroCredito);
+            // gate de poison message: alcancou max -> DLQ; caso contrario, reenfileira e
+            // o broker incrementa o contador (Service Bus DeliveryCount, RabbitMQ
+            // x-delivery-count em fila quorum, registro em memoria no Kafka).
+            if (mensagem.Tentativas >= _maxTentativas)
+            {
+                _logger.LogError(excecao, "Credito {Numero} excedeu {Max} tentativas; enviando para DLQ", dto.NumeroCredito, _maxTentativas);
+                await sessao.EnviarParaDlqAsync(mensagem, $"Excedeu {_maxTentativas} tentativas: {excecao.Message}", ct);
+                return;
+            }
+
+            _logger.LogError(excecao, "Falha ao processar credito {Numero} (tentativa {Tentativa} de {Max}); reenfileirando", dto.NumeroCredito, mensagem.Tentativas, _maxTentativas);
             await sessao.RejeitarAsync(mensagem, reencaminhar: true, ct);
         }
+    }
+
+    private static int LerMaxTentativas(IConfiguration configuration)
+    {
+        var bruto = configuration["Mensageria:MaxTentativasConsumer"];
+        if (int.TryParse(bruto, NumberStyles.Integer, CultureInfo.InvariantCulture, out var valor) && valor > 0)
+        {
+            return valor;
+        }
+
+        return MaxTentativasPadrao;
     }
 
     private static Credito ConverterParaCredito(CreditoConstituidoDto dto)
