@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
@@ -52,6 +53,12 @@ internal sealed class KafkaConsumerSession<T> : IConsumerSession<T>
         }
 
         return Task.CompletedTask;
+    }
+
+    public Task EnviarParaDlqAsync(ReceivedMessage<T> mensagem, string motivo, CancellationToken ct)
+    {
+        // implementacao real em F.2c: publica no topic de DLQ e comita o offset original
+        throw new NotImplementedException();
     }
 
     public ValueTask DisposeAsync()

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
@@ -50,6 +51,12 @@ internal sealed class ServiceBusConsumerSession<T> : IConsumerSession<T>
 
         // sem reencaminhar: manda pra dead-letter em vez de descartar silenciosamente
         return _receptor.DeadLetterMessageAsync(_originais[mensagem], cancellationToken: ct);
+    }
+
+    public Task EnviarParaDlqAsync(ReceivedMessage<T> mensagem, string motivo, CancellationToken ct)
+    {
+        // implementacao real em F.2a: dead-letter com motivo explicito via DeadLetterMessageAsync
+        throw new NotImplementedException();
     }
 
     public async ValueTask DisposeAsync()

@@ -41,6 +41,12 @@ internal sealed class RabbitMqConsumerSession<T> : IConsumerSession<T>
         return Task.CompletedTask;
     }
 
+    public Task EnviarParaDlqAsync(ReceivedMessage<T> mensagem, string motivo, CancellationToken ct)
+    {
+        // implementacao real em F.2b: publica na fila DLQ e da ack na original
+        throw new NotImplementedException();
+    }
+
     public ValueTask DisposeAsync()
     {
         // fechar o canal devolve pra fila tudo que ainda nao recebeu ack (redelivered=true)
