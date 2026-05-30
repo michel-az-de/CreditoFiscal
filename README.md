@@ -182,6 +182,8 @@ Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Si
 
 ## Decisões técnicas
 
+Decisões com peso de longo prazo vivem como ADRs (formato Michael Nygard) em [`docs/adr/`](docs/adr/): multi broker com factory, idempotência em camadas, auditoria best effort, sem outbox, sem FluentValidation e max retry e DLQ por broker. A lista expandida abaixo cobre o detalhe de engenharia que não vale ADR.
+
 <details>
 <summary>Decisões de engenharia (clique para expandir): SimplesNacional em três línguas, driver síncrono, thread-safety do publisher, sessão de consumo, idempotência, ISP, factory de provedores, auditoria de consultas e mais.</summary>
 
