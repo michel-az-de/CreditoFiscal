@@ -43,6 +43,41 @@ public sealed class PublicadorAuditoriaTestes
         await acao.Should().NotThrowAsync();
     }
 
+    [Fact]
+    public async Task PublicarConsultaAsync_QuandoPublisherDemoraMaisQueTimeout_DeveCancelarSemPropagar()
+    {
+        var publisher = Substitute.For<IMensagemPublisher>();
+        // publisher honra o ct: o cts interno cancela em 50ms e o Task.Delay lanca OperationCanceledException
+        publisher
+            .PublicarAsync(Arg.Any<string>(), Arg.Any<ConsultaCreditoRealizadaDto>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Task.Delay(TimeSpan.FromSeconds(5), callInfo.ArgAt<CancellationToken>(2)));
+        var sut = new PublicadorAuditoria(publisher, NullLogger<PublicadorAuditoria>.Instance, TimeSpan.FromMilliseconds(50));
+
+        var cronometro = System.Diagnostics.Stopwatch.StartNew();
+        var acao = async () => await sut.PublicarConsultaAsync(NovoEvento(), CancellationToken.None);
+        await acao.Should().NotThrowAsync();
+        cronometro.Stop();
+
+        // o teto interno (50ms) tem que ter cortado bem antes dos 5s simulados
+        cronometro.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task PublicarConsultaAsync_QuandoCallerCancela_NaoDevePropagar()
+    {
+        var publisher = Substitute.For<IMensagemPublisher>();
+        publisher
+            .PublicarAsync(Arg.Any<string>(), Arg.Any<ConsultaCreditoRealizadaDto>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo => Task.Delay(TimeSpan.FromSeconds(5), callInfo.ArgAt<CancellationToken>(2)));
+        var sut = new PublicadorAuditoria(publisher, NullLogger<PublicadorAuditoria>.Instance, TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource();
+        cts.CancelAfter(TimeSpan.FromMilliseconds(50));
+
+        var acao = async () => await sut.PublicarConsultaAsync(NovoEvento(), cts.Token);
+
+        await acao.Should().NotThrowAsync();
+    }
+
     private static ConsultaCreditoRealizadaDto NovoEvento()
     {
         return new ConsultaCreditoRealizadaDto

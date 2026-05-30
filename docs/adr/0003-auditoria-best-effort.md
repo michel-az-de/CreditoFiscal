@@ -5,14 +5,20 @@ Data: 2026-05-29.
 
 ## Contexto
 
-O desafio adicional pede publicar evento de auditoria em cada consulta para simular logs ou eventos armazenados em sistema externo. A leitura nao pode falhar porque a publicacao de auditoria falhou: o GET tem que responder mesmo com o broker fora.
+Cada consulta deve publicar evento de auditoria para um sistema externo (logs/eventos). A leitura nao pode falhar porque a publicacao de auditoria falhou: o GET tem que responder mesmo com o broker fora.
 
 ## Decisao
 
-`PublicadorAuditoria` publica `ConsultaCreditoRealizadaDto` no topico `consulta-credito-realizada` em cada GET. O `try` envolve a chamada de `IMensagemPublisher.PublicarAsync` e o `catch (Exception)` engole tudo e loga `Warning`. Sem retry, sem outbox, sem fila local. Reutiliza o `IMensagemPublisher` do provedor escolhido em `Mensageria:Provedor`.
+`PublicadorAuditoria` publica `ConsultaCreditoRealizadaDto` no topico `consulta-credito-realizada` em cada GET. O publish acontece dentro de um `CancellationTokenSource.CreateLinkedTokenSource(ct)` com `CancelAfter(200ms)`: broker lento estoura o teto local sem amarrar o GET. Tres caminhos:
+
+- Sucesso: publish completa antes do teto.
+- Estouro do teto local (`cts.IsCancellationRequested && !ct.IsCancellationRequested`): vira `LogWarning` distinto (mostra `TimeoutMs` no template) sem propagar.
+- Falha de broker (conexao recusada, serialization, etc.) ou cancelamento do caller: `catch (Exception)` loga `Warning` generico e nao propaga.
+
+Sem retry, sem outbox, sem fila local. Reutiliza o `IMensagemPublisher` do provedor escolhido em `Mensageria:Provedor`.
 
 ## Consequencias
 
-Positivas: auditoria nunca derruba a consulta. Trocar de broker continua sendo uma mudanca de string. Codigo simples e isolado em um caso de uso de borda.
+Positivas: auditoria nunca derruba a consulta. O teto de 200ms acota a latencia adicional que um GET paga pelo publish, independente de timeout configurado no cliente do broker. Trocar de broker continua sendo uma mudanca de string. Codigo simples e isolado em um caso de uso de borda.
 
-Negativas: auditoria e sincrona dentro da requisicao HTTP. Broker fora cai rapido com `connection refused` (modo de falha conhecido), mas broker lento sem timeout configurado no cliente faz o GET somar a latencia do publish. Trabalho futuro: envolver em `CancellationTokenSource` com timeout curto, ou disparar em `Task.Run` fora da thread da consulta. Documentado em README como "auditoria sincrona" em "Limitacoes conhecidas".
+Negativas: ainda `at-most-once`. Broker fora ou estouro de teto perde o evento de auditoria (warning logado, sem retry). Se a auditoria virar requisito forte (compliance, audit trail nao podendo perder), a evolucao natural e um outbox transacional (ver ADR 0004) ou uma fila local de eventos drenada por um worker dedicado.
