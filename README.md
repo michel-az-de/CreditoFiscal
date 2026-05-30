@@ -254,6 +254,11 @@ dotnet test tests/CreditoFiscal.TestesIntegracao/CreditoFiscal.TestesIntegracao.
 - **build-e-teste** roda `restore` + `build -c Release` + os testes unitários (não precisa de Docker). Coleta cobertura via `coverlet.collector` (`--collect:"XPlat Code Coverage"`), converte com `ReportGenerator` para HTML e publica o relatório como artefato `cobertura-html` na execução do workflow. O resumo (`Summary.txt`) é impresso no log do job para olhar rápido em PR.
 - **integracao** roda os testes de integração com Testcontainers (o runner `ubuntu-latest` já tem Docker).
 
+Complementam o pipeline:
+
+- `.github/workflows/codeql.yml`: análise CodeQL semanal (segunda 07:00 UTC) e em todo push/PR para `main` ou `develop`, focada em C#.
+- `.github/dependabot.yml`: atualizações automáticas semanais para NuGet, GitHub Actions e Docker. Cada ecossistema abre até 5 PRs simultâneos.
+
 ## Validação executada (stack real)
 
 <details>
