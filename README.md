@@ -207,6 +207,7 @@ Um crédito específico. **200** com o objeto (`simplesNacional` volta como `"Si
   - **`ProblemDetails` plain** para falhas de domínio (`ArgumentException` → 400) e runtime capturadas no `ExcecoesMiddleware` (default → 500; `BadHttpRequestException` → status da exception, ex.: 413).
 - **Endurecimento parcial.** `dataConstituicao` é `[Required]` (`DateTime?` no DTO). Os decimais (`valorIssqn`, `aliquota`, `valorFaturado`, `valorDeducao`, `baseCalculo`) **continuam com `[Range(0, ...)]`**: rejeitam **negativos**, mas **aceitam zero**. Subir o piso semântico (ex.: `[Range(0.01, ...)]` onde fizer sentido fiscal) exige decisão de domínio (`ValorDeducao = 0` é caso comum válido) e fica como trabalho futuro.
 - **Max retry e DLQ por broker.** `ReceivedMessage<T>.Tentativas` é a contagem 1-based exposta no envelope. Cada adapter popula a partir do que o broker oferece: `DeliveryCount` no Service Bus, `x-delivery-count + 1` em fila quorum no RabbitMQ, `RegistroDeTentativasKafka` em memória no Kafka. O `CreditoConsumer` decide DLQ quando `Tentativas >= Mensageria:MaxTentativasConsumer` (default 5, configurável). O destino da DLQ é assimétrico: sub-queue nativa `<fila>/$DeadLetterQueue` no Service Bus, fila *classic durable* `<fila>-dlq` no RabbitMQ (declarada pelo `CriadorDeFilas`), topic `<fila>-dlq` no Kafka (auto-criado pelo broker em dev). Detalhes por broker e *trade-offs* na seção "Limitações conhecidas".
+- **Architecture tests (NetArchTest).** Cinco regras automatizadas em `RegrasDeArquiteturaTestes` garantem que as setas de dependência da clean architecture continuem apontando para o domínio (`Api → {Aplicacao, Infraestrutura} → Dominio`), que controllers fiquem finos (sem `DbContext`, `IConfiguration` ou tipos de Infraestrutura) e que casos de uso sejam `sealed`. Pegado em CI no `dotnet test`, falha sem precisar revisor humano.
 
 </details>
 
@@ -223,12 +224,13 @@ Se cair entre persistir e confirmar, a reentrega cai no filtro 1 (ou no índice 
 
 ## Testes
 
-**Unitários** (`tests/CreditoFiscal.Testes`), 73 testes (xUnit + FluentAssertions + NSubstitute +
-EF Core InMemory), escritos em TDD (vermelho → verde) nas fases de lógica: domínio, repositório,
+**Unitários** (`tests/CreditoFiscal.Testes`), 78 testes (xUnit + FluentAssertions + NSubstitute +
+EF Core InMemory + NetArchTest), escritos em TDD (vermelho → verde) nas fases de lógica: domínio, repositório,
 conversor, middleware, controllers, casos de uso, publicador de auditoria, o `CreditoConsumer`
 (incluindo `DbUpdateException` e o gate de DLQ por `Tentativas`), os três adapters de mensageria
-(`Tentativas` populado em cada broker, `EnviarParaDlqAsync` em cada implementação) e o
-`CriadorDeFilas` (declaração quorum + DLQ no RabbitMQ).
+(`Tentativas` populado em cada broker, `EnviarParaDlqAsync` em cada implementação), o
+`CriadorDeFilas` (declaração quorum + DLQ no RabbitMQ) e 5 regras de arquitetura (clean
+architecture, controllers finos, casos de uso `sealed`).
 
 ```bash
 dotnet test tests/CreditoFiscal.Testes/CreditoFiscal.Testes.csproj
