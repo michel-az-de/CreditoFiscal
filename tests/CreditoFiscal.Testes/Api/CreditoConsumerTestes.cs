@@ -8,6 +8,7 @@ using CreditoFiscal.Aplicacao.Mensagens;
 using CreditoFiscal.Dominio.Abstracoes;
 using CreditoFiscal.Dominio.Entidades;
 using CreditoFiscal.Testes.Suporte;
+using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -109,15 +110,49 @@ public sealed class CreditoConsumerTestes
         await sessao.DidNotReceive().ConfirmarAsync(Arg.Any<ReceivedMessage<CreditoConstituidoDto>>(), Arg.Any<CancellationToken>());
     }
 
-    private static CreditoConsumer MontarConsumer(int maxTentativas = 5)
+    [Fact]
+    public void IntervaloPolling_QuandoConfigAusente_DeveSer500ms()
+    {
+        var consumer = MontarConsumer();
+
+        consumer.IntervaloPolling.Should().Be(TimeSpan.FromMilliseconds(500));
+    }
+
+    [Theory]
+    [InlineData("250", 250)]
+    [InlineData("1000", 1000)]
+    public void IntervaloPolling_QuandoConfigPresente_DeveLerValorEmMs(string bruto, int esperadoMs)
+    {
+        var consumer = MontarConsumer(intervaloPollingMs: bruto);
+
+        consumer.IntervaloPolling.Should().Be(TimeSpan.FromMilliseconds(esperadoMs));
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-5")]
+    [InlineData("abc")]
+    public void IntervaloPolling_QuandoConfigInvalida_DeveCairNoPadrao(string bruto)
+    {
+        var consumer = MontarConsumer(intervaloPollingMs: bruto);
+
+        consumer.IntervaloPolling.Should().Be(TimeSpan.FromMilliseconds(500));
+    }
+
+    private static CreditoConsumer MontarConsumer(int maxTentativas = 5, string? intervaloPollingMs = null)
     {
         var scopeFactory = Substitute.For<IServiceScopeFactory>();
         var consumer = Substitute.For<IMensagemConsumer>();
+        var chaves = new Dictionary<string, string?>
+        {
+            ["Mensageria:MaxTentativasConsumer"] = maxTentativas.ToString(CultureInfo.InvariantCulture)
+        };
+        if (intervaloPollingMs != null)
+        {
+            chaves["Mensageria:IntervaloPollingMs"] = intervaloPollingMs;
+        }
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Mensageria:MaxTentativasConsumer"] = maxTentativas.ToString(CultureInfo.InvariantCulture)
-            })
+            .AddInMemoryCollection(chaves)
             .Build();
         return new CreditoConsumer(scopeFactory, consumer, configuration, NullLogger<CreditoConsumer>.Instance);
     }

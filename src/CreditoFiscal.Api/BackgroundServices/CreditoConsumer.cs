@@ -17,11 +17,13 @@ namespace CreditoFiscal.Api.BackgroundServices;
 public sealed class CreditoConsumer : BackgroundService
 {
     private const int MaxTentativasPadrao = 5;
+    private const int IntervaloPollingPadraoMs = 500;
 
     private readonly IServiceScopeFactory _escopos;
     private readonly IMensagemConsumer _consumer;
     private readonly ILogger<CreditoConsumer> _logger;
     private readonly int _maxTentativas;
+    private readonly TimeSpan _intervaloPolling;
 
     public CreditoConsumer(IServiceScopeFactory escopos, IMensagemConsumer consumer, IConfiguration configuration, ILogger<CreditoConsumer> logger)
     {
@@ -29,7 +31,10 @@ public sealed class CreditoConsumer : BackgroundService
         _consumer = consumer;
         _logger = logger;
         _maxTentativas = LerMaxTentativas(configuration);
+        _intervaloPolling = LerIntervaloPolling(configuration);
     }
+
+    internal TimeSpan IntervaloPolling => _intervaloPolling;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -42,7 +47,7 @@ public sealed class CreditoConsumer : BackgroundService
 
                 foreach (var mensagem in sessao.Mensagens)
                 {
-                    // escopo por mensagem: cada uma comeca com um DbContext limpo
+                    // escopo por mensagem: DbContext limpo, sem tracking compartilhado
                     using var escopo = _escopos.CreateScope();
                     var repositorio = escopo.ServiceProvider.GetRequiredService<ICreditoRepository>();
                     var unidade = escopo.ServiceProvider.GetRequiredService<IUnidadeDeTrabalho>();
@@ -55,11 +60,11 @@ public sealed class CreditoConsumer : BackgroundService
             }
             catch (Exception excecao)
             {
-                // defesa: nenhum defeito de iteracao pode escapar do ExecuteAsync e derrubar o host
+                // .NET 6: excecao escapando de ExecuteAsync mata o host; engole e segue
                 _logger.LogError(excecao, "Falha na iteracao do consumidor; continuando");
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(500), stoppingToken);
+            await Task.Delay(_intervaloPolling, stoppingToken);
         }
     }
 
@@ -77,7 +82,7 @@ public sealed class CreditoConsumer : BackgroundService
 
         try
         {
-            // idempotencia 1: ja persistido -> confirma sem reprocessar
+            // idempotencia 1: ja persistido -> confirma e sai
             if (await repositorio.ExisteAsync(dto.NumeroCredito, ct))
             {
                 _logger.LogWarning("Credito {Numero} ja existe; duplicata ignorada", dto.NumeroCredito);
@@ -91,15 +96,13 @@ public sealed class CreditoConsumer : BackgroundService
         }
         catch (DbUpdateException)
         {
-            // idempotencia 2: corrida entre instancias bateu no unique do banco -> confirma
+            // idempotencia 2: corrida entre instancias bateu no unique -> confirma
             _logger.LogWarning("Credito {Numero} duplicado no commit; confirmando", dto.NumeroCredito);
             await sessao.ConfirmarAsync(mensagem, ct);
         }
         catch (Exception excecao)
         {
-            // gate de poison message: alcancou max -> DLQ; caso contrario, reenfileira e
-            // o broker incrementa o contador (Service Bus DeliveryCount, RabbitMQ
-            // x-delivery-count em fila quorum, registro em memoria no Kafka).
+            // gate de poison message: alcancou max -> DLQ; senao reenfileira e o broker incrementa Tentativas
             if (mensagem.Tentativas >= _maxTentativas)
             {
                 _logger.LogError(excecao, "Credito {Numero} excedeu {Max} tentativas; enviando para DLQ", dto.NumeroCredito, _maxTentativas);
@@ -121,6 +124,17 @@ public sealed class CreditoConsumer : BackgroundService
         }
 
         return MaxTentativasPadrao;
+    }
+
+    private static TimeSpan LerIntervaloPolling(IConfiguration configuration)
+    {
+        var bruto = configuration["Mensageria:IntervaloPollingMs"];
+        if (int.TryParse(bruto, NumberStyles.Integer, CultureInfo.InvariantCulture, out var valor) && valor > 0)
+        {
+            return TimeSpan.FromMilliseconds(valor);
+        }
+
+        return TimeSpan.FromMilliseconds(IntervaloPollingPadraoMs);
     }
 
     private static Credito ConverterParaCredito(CreditoConstituidoDto dto)
