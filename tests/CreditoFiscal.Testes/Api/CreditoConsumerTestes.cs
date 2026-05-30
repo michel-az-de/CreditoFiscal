@@ -7,6 +7,7 @@ using CreditoFiscal.Api.BackgroundServices;
 using CreditoFiscal.Aplicacao.Mensagens;
 using CreditoFiscal.Dominio.Abstracoes;
 using CreditoFiscal.Dominio.Entidades;
+using CreditoFiscal.Testes.Suporte;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,7 +28,7 @@ public sealed class CreditoConsumerTestes
         var unidade = Substitute.For<IUnidadeDeTrabalho>();
         var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
         var consumer = MontarConsumer();
-        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(MontarDto("123")) { Tentativas = 1 };
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 1 };
 
         await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
 
@@ -44,7 +45,7 @@ public sealed class CreditoConsumerTestes
         var unidade = Substitute.For<IUnidadeDeTrabalho>();
         var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
         var consumer = MontarConsumer();
-        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(MontarDto("123")) { Tentativas = 1 };
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 1 };
 
         await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
 
@@ -62,7 +63,7 @@ public sealed class CreditoConsumerTestes
         unidade.SalvarAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new DbUpdateException("conflito de unique"));
         var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
         var consumer = MontarConsumer();
-        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(MontarDto("123")) { Tentativas = 1 };
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 1 };
 
         await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
 
@@ -80,7 +81,7 @@ public sealed class CreditoConsumerTestes
         var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
         var consumer = MontarConsumer(maxTentativas: 5);
         // Tentativas = 3 esta dentro do orcamento (< 5): ainda reenfileira
-        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(MontarDto("123")) { Tentativas = 3 };
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 3 };
 
         await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
 
@@ -99,7 +100,7 @@ public sealed class CreditoConsumerTestes
         var sessao = Substitute.For<IConsumerSession<CreditoConstituidoDto>>();
         var consumer = MontarConsumer(maxTentativas: 5);
         // Tentativas = 5 == max: a entrega Nesima falhou e o consumer encaminha pra DLQ
-        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(MontarDto("123")) { Tentativas = 5 };
+        var mensagem = new ReceivedMessage<CreditoConstituidoDto>(CreditoMother.Constituido("123")) { Tentativas = 5 };
 
         await consumer.ProcessarAsync(repositorio, unidade, sessao, mensagem, CancellationToken.None);
 
@@ -121,20 +122,4 @@ public sealed class CreditoConsumerTestes
         return new CreditoConsumer(scopeFactory, consumer, configuration, NullLogger<CreditoConsumer>.Instance);
     }
 
-    private static CreditoConstituidoDto MontarDto(string numeroCredito)
-    {
-        return new CreditoConstituidoDto
-        {
-            NumeroCredito = numeroCredito,
-            NumeroNfse = "nfse-1",
-            DataConstituicao = new DateTime(2024, 2, 25),
-            ValorIssqn = 1500.75m,
-            TipoCredito = "ISSQN",
-            SimplesNacional = SimplesNacional.NaoOptante,
-            Aliquota = 5.0m,
-            ValorFaturado = 30000m,
-            ValorDeducao = 5000m,
-            BaseCalculo = 25000m
-        };
-    }
 }
