@@ -15,7 +15,7 @@ COPY src/ src/
 RUN dotnet publish src/CreditoFiscal.Api/CreditoFiscal.Api.csproj -c Release -o /app/publish --no-restore
 
 # runtime: so o ASP.NET 6, imagem final menor
-FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
 EXPOSE 8080
