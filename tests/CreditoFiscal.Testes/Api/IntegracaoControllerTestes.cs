@@ -50,11 +50,11 @@ public sealed class IntegracaoControllerTestes
         var resultado = await controller.IntegrarAsync(creditos, CancellationToken.None);
 
         var badRequest = resultado.Should().BeOfType<BadRequestObjectResult>().Subject;
-        // paridade de wire (T1)
+        // paridade de wire: 400 manual sai como application/problem+json igual ao automatico
         badRequest.ContentTypes.Should().Contain("application/problem+json");
         var problema = badRequest.Value.Should().BeOfType<ValidationProblemDetails>().Subject;
         problema.Errors.Should().ContainKey("creditos");
-        // trava o fix do T6: sem Status=400 explicito o corpo serializaria "status": null no .NET 6
+        // sem Status=400 explicito o corpo serializaria "status": null no .NET 6 (auto-sync veio no 7)
         problema.Status.Should().Be(400);
         await integrar.DidNotReceive().ExecutarAsync(Arg.Any<List<IntegrarCreditoRequisicaoDto>>(), Arg.Any<CancellationToken>());
     }

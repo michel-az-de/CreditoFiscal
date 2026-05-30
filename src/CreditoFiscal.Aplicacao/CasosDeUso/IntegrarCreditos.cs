@@ -19,15 +19,14 @@ public sealed class IntegrarCreditos : IIntegrarCreditos
 
     public async Task ExecutarAsync(IReadOnlyList<IntegrarCreditoRequisicaoDto> creditos, CancellationToken ct)
     {
-        // valida o lote inteiro antes de publicar: um SimplesNacional invalido derruba tudo
-        // com 400, sem deixar metade dos creditos na fila
+        // pre-valida o lote: SimplesNacional invalido cancela tudo, sem publicar parcial
         var mensagens = new List<CreditoConstituidoDto>();
         foreach (var requisicao in creditos)
         {
             mensagens.Add(ConverterParaMensagem(requisicao));
         }
 
-        // publica um a um: cada credito e uma mensagem independente (sem bulk)
+        // uma mensagem por credito: idempotencia, auditoria e DLQ operam por item
         foreach (var mensagem in mensagens)
         {
             await _publisher.PublicarAsync(Filas.IntegrarCreditoConstituido, mensagem, ct);
@@ -40,9 +39,7 @@ public sealed class IntegrarCreditos : IIntegrarCreditos
         {
             NumeroCredito = requisicao.NumeroCredito,
             NumeroNfse = requisicao.NumeroNfse,
-            // invariante: ModelState ([Required]) garante DataConstituicao != null aqui.
-            // Caller que invocar fora do pipeline HTTP precisa setar o valor antes.
-            // O '!' suprime o CS8629 (flow analysis nao consegue inferir o invariante a partir do atributo).
+            // invariante: ModelState [Required] garante nao-nulo aqui; ! suprime CS8629
             DataConstituicao = requisicao.DataConstituicao!.Value,
             ValorIssqn = requisicao.ValorIssqn,
             TipoCredito = requisicao.TipoCredito,

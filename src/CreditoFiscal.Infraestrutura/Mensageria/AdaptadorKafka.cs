@@ -9,10 +9,8 @@ using CreditoFiscal.Dominio.Abstracoes;
 
 namespace CreditoFiscal.Infraestrutura.Mensageria;
 
-// adapter Kafka. Publicar = produce (encaixa direto). No consumo, o modelo de streaming do
-// Kafka (offset por particao) nao tem ack/requeue por mensagem: Confirmar = commit do offset,
-// Rejeitar = seek de volta pra reler. Caveat documentado no README. Para Tentativas e DLQ,
-// o adapter mantem um registro proprio em memoria indexado por offset (RegistroDeTentativasKafka).
+// Kafka nao tem ack/requeue por mensagem: Confirmar = commit de offset, Rejeitar = seek;
+// Tentativas vivem no RegistroDeTentativasKafka (em memoria, indexado por offset).
 public sealed class AdaptadorKafka : IMensagemPublisher, IMensagemConsumer
 {
     private readonly IProducer<Null, byte[]> _produtor;

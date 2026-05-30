@@ -21,4 +21,4 @@ Negativas honestas:
 
 ## Por que nao reverter
 
-Reverter exigiria reescrever a secao `Publish parcial do lote` em `Idempotencia e garantia de entrega` no README. O texto atual ja documenta a escolha como consciente. Acrescentar outbox cria contradicao com o paragrafo existente. Quando o requisito mudar, reescreve.
+Reverter exigiria reescrever a secao `Publish parcial do lote` em `Idempotencia e garantia de entrega` no README. O texto atual ja documenta a escolha como consciente. Acrescentar outbox cria contradicao com o paragrafo existente. Se o trade-off mudar (ex.: contrato de cliente exigir entrega exatamente-uma-vez), reabrir o ADR.

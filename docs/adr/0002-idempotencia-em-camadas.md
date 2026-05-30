@@ -5,7 +5,7 @@ Data: 2026-05-29.
 
 ## Contexto
 
-Entrega `at-least-once` e a postura padrao para brokers de mensageria. Sem idempotencia, o consumer duplica entidades a cada redelivery. O enunciado cita explicitamente a obrigacao de nao inserir em bulk e que cada mensagem seja persistida distintamente.
+Entrega `at-least-once` e a postura padrao para brokers de mensageria. Sem idempotencia, o consumer duplica entidades a cada redelivery. Como cada mensagem e persistida distintamente (sem bulk), a janela de duplicata existe e precisa ser fechada.
 
 ## Decisao
 

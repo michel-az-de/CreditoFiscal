@@ -7,7 +7,6 @@ using CreditoFiscal.Dominio.Abstracoes;
 
 namespace CreditoFiscal.Infraestrutura.Mensageria;
 
-// adapter Azure ServiceBus: enviar = publicar; receber + complete/abandon = consumir + ack/nack
 public sealed class AdaptadorServiceBus : IMensagemPublisher, IMensagemConsumer
 {
     private readonly ServiceBusClient _cliente;

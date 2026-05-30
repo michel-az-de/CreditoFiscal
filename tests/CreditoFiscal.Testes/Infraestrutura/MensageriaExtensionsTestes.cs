@@ -11,9 +11,7 @@ namespace CreditoFiscal.Testes.Infraestrutura;
 
 public sealed class MensageriaExtensionsTestes
 {
-    // A factory escolhe o adapter por config (OCP): trocar de broker = trocar uma string,
-    // sem mexer em controller nem consumer. RabbitMQ nao entra aqui porque resolve-lo
-    // abriria conexao (com retry) no teste; Kafka e ServiceBus criam clientes preguicosos.
+    // RabbitMQ omitido: resolver abriria conexao com retry; Kafka e ServiceBus sao clientes preguicosos
     [Theory]
     [InlineData("Kafka", typeof(AdaptadorKafka))]
     [InlineData("ServiceBus", typeof(AdaptadorServiceBus))]

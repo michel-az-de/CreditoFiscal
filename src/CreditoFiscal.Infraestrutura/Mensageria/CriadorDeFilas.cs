@@ -6,10 +6,8 @@ using RabbitMQ.Client;
 
 namespace CreditoFiscal.Infraestrutura.Mensageria;
 
-// declara fila principal (quorum) e DLQ (classic durable) no startup, idempotente.
-// quorum incrementa x-delivery-count automaticamente em cada redelivery e dead-letteriza
-// ao exceder x-delivery-limit; o consumer atua como gate primario via Tentativas, e o
-// limite na fila e a rede de seguranca para race conditions e restart do consumer.
+// quorum queue + x-delivery-limit: o broker e a rede de seguranca; o consumer e o gate primario
+// via Tentativas (que cobre race condition e restart).
 public sealed class CriadorDeFilas : IHostedService
 {
     private const int LimiteDeEntregasFila = 10;

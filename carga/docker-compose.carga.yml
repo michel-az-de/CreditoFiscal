@@ -1,8 +1,4 @@
-# Rode cada cenario individualmente (nao 'up', que sobe os tres juntos):
-#   docker compose -f carga/docker-compose.carga.yml run --rm k6-pico
-#   (drenar a fila - ver README)
-#   docker compose -f carga/docker-compose.carga.yml run --rm k6-leitura
-#   docker compose -f carga/docker-compose.carga.yml run --rm k6-stress
+# Rode cada cenario individualmente com `run --rm <servico>` (drenar a fila entre eles - ver README).
 services:
   k6-pico:
     image: grafana/k6:latest

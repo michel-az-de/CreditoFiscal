@@ -45,7 +45,7 @@ public sealed class RabbitMqConsumerSessionTestes
     [Fact]
     public async Task Sessao_QuandoDuasEntregasComMesmoConteudo_DeveConfirmarCadaUmaSeparadamente()
     {
-        // C13: ReceivedMessage e identidade por referencia. Duas entregas iguais sao envelopes
+        // ReceivedMessage e identidade por referencia. Duas entregas iguais sao envelopes
         // distintos; se fosse record, colidiriam no dicionario e um DeliveryTag ficaria orfao.
         var canal = Substitute.For<IModel>();
         canal.BasicGet("fila", false).Returns(

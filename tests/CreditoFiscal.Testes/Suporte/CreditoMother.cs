@@ -6,14 +6,11 @@ using CreditoFiscal.Dominio.Entidades;
 
 namespace CreditoFiscal.Testes.Suporte;
 
-// ObjectMother centraliza a construcao de fixtures de credito pros testes. Bogus gera dados
-// realistas com seed determinista por chamada (mesma entrada -> mesma saida), o que mantem
-// a suite reprodutivel sem ter que escrever todos os campos a mao em cada teste.
 internal static class CreditoMother
 {
     public static CreditoConstituidoDto Constituido(string numeroCredito = "123456", int semente = 42)
     {
-        // CustomInstantiator e o caminho oficial do Bogus para records com init-only setters
+        // CustomInstantiator: caminho do Bogus para record com init-only
         var faker = new Faker<CreditoConstituidoDto>("pt_BR")
             .UseSeed(semente)
             .CustomInstantiator(f => new CreditoConstituidoDto
@@ -35,8 +32,7 @@ internal static class CreditoMother
 
     public static IntegrarCreditoRequisicaoDto Requisicao(string numeroCredito = "1", string simplesNacional = "Sim")
     {
-        // requisicao usa valores deterministas: muitos testes verificam shape/validacao,
-        // onde dados aleatorios so adicionariam ruido. Bogus entra onde variedade ajuda.
+        // deterministico: shape/validacao nao ganham com aleatoriedade
         return new IntegrarCreditoRequisicaoDto
         {
             NumeroCredito = numeroCredito,

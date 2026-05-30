@@ -2,7 +2,7 @@ using System;
 
 namespace CreditoFiscal.Aplicacao.Dtos;
 
-// resposta dos GETs: espelha o credito, mas com SimplesNacional em "Sim"/"Não" pro cliente
+// espelha Credito; SimplesNacional sai como "Sim"/"Não" no JSON
 public sealed record CreditoRespostaDto
 {
     public string NumeroCredito { get; init; } = string.Empty;

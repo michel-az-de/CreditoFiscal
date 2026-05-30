@@ -5,7 +5,7 @@ Data: 2026-05-29.
 
 ## Contexto
 
-O enunciado pede ingestao via mensageria. A entrega tem que demonstrar competencia em multiplos brokers (Kafka e Azure Service Bus citados no requisito) e nao acoplar Controller e Consumer a um broker especifico. RabbitMQ entrou como terceira opcao por ser leve e familiar em CI.
+O fluxo usa mensageria para integracao. Suportar mais de um broker (Kafka e Azure Service Bus) evita acoplar Controller e Consumer a uma implementacao especifica; RabbitMQ entrou como terceira opcao por ser leve e familiar em CI.
 
 ## Decisao
 

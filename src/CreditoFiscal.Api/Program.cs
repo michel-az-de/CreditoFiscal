@@ -25,14 +25,14 @@ builder.Services.AddControllers().AddJsonOptions(opcoes =>
     opcoes.JsonSerializerOptions.Converters.Add(new ConversorDeDataSemFusoHorario());
 });
 
-// Swagger sempre on (sem guard de ambiente), como o enunciado pede
+// Swagger ligado fora de Development (override do guard padrao do template) pra facilitar a inspecao da API
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(opcoes =>
 {
     opcoes.SwaggerDoc("v1", new OpenApiInfo { Title = "CreditoFiscal", Version = "v1" });
 });
 
-// observabilidade: traces (HTTP + span do consumer) e metricas, exportados pro console
+// trace HTTP + span do consumer; metricas runtime; export console
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(recurso => recurso.AddService("CreditoFiscal"))
     .WithTracing(tracing =>

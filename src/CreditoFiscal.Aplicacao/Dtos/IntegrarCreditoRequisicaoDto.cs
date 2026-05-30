@@ -3,9 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace CreditoFiscal.Aplicacao.Dtos;
 
-// contrato de entrada do POST: SimplesNacional chega como "Sim"/"Não" (texto do cliente).
-// validacao basica via DataAnnotations -> o [ApiController] devolve 400 com ProblemDetails
-// antes mesmo de chamar o caso de uso (campos faltando, fora de range, etc.)
+// contrato de entrada do POST: SimplesNacional chega como "Sim"/"Não" (texto do cliente)
 public sealed record IntegrarCreditoRequisicaoDto
 {
     [Required]

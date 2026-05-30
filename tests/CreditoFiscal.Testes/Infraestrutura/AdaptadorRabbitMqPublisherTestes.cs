@@ -39,7 +39,7 @@ public sealed class AdaptadorRabbitMqPublisherTestes
     [Fact]
     public void Adapter_NaoDeveGuardarIModelComoCampo()
     {
-        // C17: IModel nao e thread-safe; o publisher singleton cria um canal local por chamada
+        // IModel nao e thread-safe; o publisher singleton cria um canal local por chamada
         var campos = typeof(AdaptadorRabbitMq).GetFields(
             BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 

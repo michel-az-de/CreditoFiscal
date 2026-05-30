@@ -27,10 +27,10 @@ public sealed class CreditoFiscalDbContext : DbContext
             b.Property(x => x.NumeroCredito).HasColumnName("numero_credito").HasMaxLength(50).IsRequired();
             b.Property(x => x.NumeroNfse).HasColumnName("numero_nfse").HasMaxLength(50).IsRequired();
 
-            // data fiscal sem hora/fuso -> DATE, como o enunciado pede
+            // data fiscal sem hora/fuso -> DATE
             b.Property(x => x.DataConstituicao).HasColumnName("data_constituicao").HasColumnType("date");
 
-            // precisao do enunciado: moeda (15,2), aliquota (5,2)
+            // moeda (15,2), aliquota (5,2)
             b.Property(x => x.ValorIssqn).HasColumnName("valor_issqn").HasPrecision(15, 2);
             b.Property(x => x.ValorFaturado).HasColumnName("valor_faturado").HasPrecision(15, 2);
             b.Property(x => x.ValorDeducao).HasColumnName("valor_deducao").HasPrecision(15, 2);
@@ -39,7 +39,7 @@ public sealed class CreditoFiscalDbContext : DbContext
 
             b.Property(x => x.TipoCredito).HasColumnName("tipo_credito").HasMaxLength(50).IsRequired();
 
-            // enum no dominio, boolean no banco (enunciado)
+            // enum no dominio, boolean no banco
             b.Property(x => x.SimplesNacional)
                 .HasColumnName("simples_nacional")
                 .HasConversion(

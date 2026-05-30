@@ -7,9 +7,8 @@ using Xunit;
 
 namespace CreditoFiscal.Testes.Arquitetura;
 
-// guardrail automatico contra regressao de dependencia. Reflete as setas de arquitetura
-// do README: Api -> {Aplicacao, Infraestrutura} -> Dominio. Tudo o que quebrar isso
-// rompe a clean architecture e e merecedor de reprovacao no CI.
+// guardrail das setas de dependencia: Api -> {Aplicacao, Infraestrutura} -> Dominio.
+// Quebrar uma seta rompe a clean architecture e o CI reprova.
 public sealed class RegrasDeArquiteturaTestes
 {
     [Fact]
@@ -48,8 +47,7 @@ public sealed class RegrasDeArquiteturaTestes
     [Fact]
     public void Controllers_NaoDependemDeDbContextIConfigurationNemDeTiposDeInfraestrutura()
     {
-        // controllers devem ser finos: chamar caso de uso e traduzir HTTP, nunca abrir
-        // DbContext direto nem ler configuracao bruta. Esse teste fixa essa convencao.
+        // controllers finos: traduzem HTTP e chamam caso de uso, sem DbContext nem IConfiguration
         var resultado = Types.InAssembly(typeof(Program).Assembly)
             .That()
             .ResideInNamespace("CreditoFiscal.Api.Controllers")
@@ -63,9 +61,7 @@ public sealed class RegrasDeArquiteturaTestes
     [Fact]
     public void CasosDeUso_DevemSerSealed()
     {
-        // intencao: caso de uso e ponto de entrada de fluxo, nao base para heranca.
-        // Inclui os tipos concretos do namespace CasosDeUso e exclui o tipo de extensao
-        // estatico (que ja e sealed implicito).
+        // caso de uso e ponto de entrada de fluxo, nao base para heranca; AplicacaoExtensions e static.
         var resultado = Types.InAssembly(typeof(IIntegrarCreditos).Assembly)
             .That()
             .ResideInNamespace("CreditoFiscal.Aplicacao.CasosDeUso")

@@ -7,8 +7,7 @@ namespace CreditoFiscal.Api.HealthChecks;
 
 public static class MensageriaHealthChecksExtensions
 {
-    // escolhe o health check certo conforme o provedor de mensageria configurado:
-    // sem isso o /ready quebraria ao trocar de broker (o IConnection do Rabbit nem existe quando o provedor e Kafka/SB)
+    // health check por provedor: sem isso o /ready quebraria ao trocar de broker
     public static IHealthChecksBuilder AdicionarHealthCheckMensageria(
         this IHealthChecksBuilder builder,
         IConfiguration configuration)
