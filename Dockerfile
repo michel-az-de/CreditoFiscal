@@ -1,5 +1,5 @@
 # build: SDK 6 (a versao exata respeita o global.json)
-FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # so os manifestos primeiro: cacheia o restore enquanto o codigo nao muda
