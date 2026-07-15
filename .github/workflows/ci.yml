@@ -11,16 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configura .NET (versao do global.json)
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
       # cacheia ~/.nuget/packages indexado pelos csproj para nao baixar tudo a cada run
       - name: Cache de pacotes NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
@@ -38,8 +38,12 @@ jobs:
       - name: Roda os testes unitarios com cobertura
         run: dotnet test tests/CreditoFiscal.Testes/CreditoFiscal.Testes.csproj --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./TestResults
 
+      # Pin em 5.3.x: e a ultima serie do ReportGenerator que ainda publica target net6.0.
+      # A 5.4+ so traz net8/net9 e a 5.5+ net8/9/10, incompativeis com o runtime net6
+      # fixado no global.json -> restore quebra com NU1202. Ao subir o projeto de net6,
+      # remover o --version para voltar a usar a versao mais recente.
       - name: Instala ReportGenerator
-        run: dotnet tool install -g dotnet-reportgenerator-globaltool
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool --version 5.3.11
 
       - name: Converte cobertura para HTML
         run: reportgenerator -reports:'./TestResults/**/coverage.cobertura.xml' -targetdir:'./TestResults/CoverageReport' -reporttypes:'HtmlInline;TextSummary'
@@ -48,7 +52,7 @@ jobs:
         run: cat ./TestResults/CoverageReport/Summary.txt
 
       - name: Publica relatorio HTML como artefato
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cobertura-html
           path: ./TestResults/CoverageReport
@@ -58,15 +62,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configura .NET (versao do global.json)
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
       - name: Cache de pacotes NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
